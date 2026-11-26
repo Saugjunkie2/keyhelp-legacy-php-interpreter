@@ -86,7 +86,7 @@ Derselbe Fingerabdruck steht auf dem zweiten Kanal `https://lizenz.retrowork.de/
 | Installer: Installation, Update, Rückbau und 58 Fehler- und Abbruchfälle | alle wie erwartet; nach dem Rückbau gleicher Paketstand wie vorher | in einer minimalen Debian-13-Umgebung (Chroot) |
 | Einsatz unter KeyHelp | 5.6 im Panel wählbar, KeyHelp legt Pool und VHost an und startet den Dienst; Websites, Neustart, KeyHelps Wartungsjobs; Update mit unter einer Sekunde Ausfall | auf dem Testserver; Sichtprüfung im Panel durch Retrowork |
 | ionCube- und SourceGuardian-Loader | laden und arbeiten wie unter Debian 12, auch mit einer 2010 für PHP 5 verschlüsselten Anwendungsdatei | in Chroots und auf dem Testserver |
-| `install.sh` und die Werkzeuge für Releases | Signatur, Prüfsummen, Widerruf und ältere Releases in 72 Fällen wie erwartet | lokal unter Linux und Windows (Git Bash), siehe [tests/](tests/) |
+| `install.sh` und die Werkzeuge für Releases | Signatur, Prüfsummen, Widerruf, ältere Releases und Start des Installers in 90 Fällen wie erwartet; ein signiertes Test-Release über sein `install.sh` als Update eingespielt, im leichten und im vollen Zweig, danach `check` und die Website in Ordnung | unter Windows (Git Bash) und als root in einer Debian-13-Chroot; Ende-zu-Ende auf dem Testserver ([tests/](tests/)) |
 
 Nicht geprüft: ein Selbst-Update von KeyHelp auf eine neue Hauptversion; ob KeyHelps `php-update` den ausgeschalteten Schalter beachtet (nur wichtig, falls KeyHelp für Debian 13 je ein 5.6-Paket anböte); der Einsatz auf vielen verschiedenen Servern. Eine Prüfung durch Dritte gab es bisher nicht.
 

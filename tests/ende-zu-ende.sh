@@ -1,5 +1,6 @@
 #!/bin/bash
-# ende-zu-ende.sh - Version 1.0.0
+# ende-zu-ende.sh - Version 1.0.1
+# 1.0.1: fehlt install-sh.log noch, keine Meldung der Shell mehr (Reihenfolge der Umleitungen)
 # Prüft den ganzen Weg auf einem TESTSERVER mit Debian 13, KeyHelp und schon installiertem PHP 5.6
 # dieses Projekts: Wegwerf-Schlüssel erzeugen, ein Release mit dem echten Installer und dem echten
 # Ergänzungssatz bauen, signieren und prüfen, es mit dem install.sh aus diesem Release einspielen
@@ -49,13 +50,13 @@ bedingung() {
   else fehl=$((fehl + 1)); printf 'FEHL %-4s nicht erfüllt: %s\n' "$name" "$*"; fi
 }
 
-printf 'ende-zu-ende 1.0.0, %s, Debian %s, KeyHelp-Server, installiert: %s\n' "$(openssl version | cut -d' ' -f1-2)" \
+printf 'ende-zu-ende 1.0.1, %s, Debian %s, KeyHelp-Server, installiert: %s\n' "$(openssl version | cut -d' ' -f1-2)" \
   "$(cat /etc/debian_version)" "$(sed -n 's/^KHLI_VERSION=//p' /var/lib/khli-php56/zustand.env | tail -n 1)"
 printf 'Ergänzungssatz %s, SHA-256 %s\n' "$(basename -- "$erg")" "$(sha256 "$erg")"
 openssl genpkey -algorithm ed25519 -aes-256-cbc -pass "pass:$PW" -out "$t/test.key" 2> /dev/null || fehler "kein Wegwerf-Schlüssel" 4
 openssl pkey -in "$t/test.key" -passin "pass:$PW" -pubout -out "$t/test.pub" || fehler "kein öffentlicher Schlüssel" 4
 printf 'Wegwerf-Schlüssel SHA256:%s (wird am Ende gelöscht)\n' "$(schluessel_fingerabdruck "$t/test.pub")"
-log_vorher=$(wc -l < /var/log/khli-php56/install-sh.log 2> /dev/null || echo 0)
+log_vorher=$( { wc -l < /var/log/khli-php56/install-sh.log; } 2> /dev/null || echo 0)
 
 schritt E01 0 bash "$wurzel/werkzeuge/release-bauen.sh" --ohne-git --schluessel "$t/test.pub" "$erg" "$t/release"
 printf '%s\n' "$PW" > "$t/pw"
@@ -71,7 +72,7 @@ if [ "$voll" = 1 ]; then
   schritt E07 0 /usr/local/sbin/khli-php56 check
 fi
 schritt E08 0 /usr/local/sbin/khli-php56 status
-log_nachher=$(wc -l < /var/log/khli-php56/install-sh.log 2> /dev/null || echo 0)
+log_nachher=$( { wc -l < /var/log/khli-php56/install-sh.log; } 2> /dev/null || echo 0)
 bedingung E09 test "$log_nachher" -gt "$log_vorher"
 tail -n 2 /var/log/khli-php56/install-sh.log | sed 's/^/     | /'
 # ohne Installation: echter zweiter Kanal (Exit 0 auch ohne Liste, dann mit Warnung) und das neueste
