@@ -6,7 +6,7 @@ Goal: anyone installing this project can verify that a release comes from Retrow
 
 ## Chain of trust
 
-1. The public Ed25519 key is embedded in the `install.sh` of every release, and also published in `schluessel/release-ed25519.pub`, as a fingerprint in the README and on the second channel. Only Retrowork holds the private key, encrypted with a passphrase and offline.
+1. The public Ed25519 key is embedded in the `install.sh` of every release, and also published in `schluessel/release-ed25519.pub`, as a fingerprint in the README and on the second channel: `SHA256:6db970b09f586927f6f216b317c831261b95b254e29219d2a402e4c30d4a6c41`. Only Retrowork holds the private key; it is not stored in any repository.
 2. `SHA256SUMS.sig` is the Ed25519 signature over `SHA256SUMS`.
 3. `SHA256SUMS` lists the SHA-256 of every file of the release: `install.sh`, `khli-php56.sh`, `RELEASE` and the supplement.
 4. `RELEASE` names product, version, system, installer, supplement, KeyHelp's original package with its SHA-256, the commit and the date.

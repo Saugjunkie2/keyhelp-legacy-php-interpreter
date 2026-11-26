@@ -6,7 +6,7 @@ Ziel: Wer dieses Projekt installiert, soll prüfen können, dass ein Release von
 
 ## Vertrauenskette
 
-1. Der öffentliche Ed25519-Schlüssel steht fest im `install.sh` jedes Releases, dazu in `schluessel/release-ed25519.pub`, als Fingerabdruck im README und auf dem zweiten Kanal. Den privaten Schlüssel hat nur Retrowork, mit Passphrase verschlüsselt und offline.
+1. Der öffentliche Ed25519-Schlüssel steht fest im `install.sh` jedes Releases, dazu in `schluessel/release-ed25519.pub`, als Fingerabdruck im README und auf dem zweiten Kanal: `SHA256:6db970b09f586927f6f216b317c831261b95b254e29219d2a402e4c30d4a6c41`. Den privaten Schlüssel hat nur Retrowork; er liegt in keinem Repository.
 2. `SHA256SUMS.sig` ist die Ed25519-Signatur über `SHA256SUMS`.
 3. `SHA256SUMS` nennt den SHA-256 jeder Datei des Releases: `install.sh`, `khli-php56.sh`, `RELEASE` und den Ergänzungssatz.
 4. `RELEASE` nennt Produkt, Version, System, Installer, Ergänzungssatz, KeyHelps Originalpaket mit SHA-256, den Commit und das Datum.

@@ -68,12 +68,12 @@ Details, exit codes and troubleshooting: [docs/en/operation.md](docs/en/operatio
 
 ## Tamper protection
 
-Every release contains `SHA256SUMS` with the SHA-256 of all files and `SHA256SUMS.sig`, an Ed25519 signature over it. Only Retrowork holds the private key, offline. Only what is signed with this key is official.
+Every release contains `SHA256SUMS` with the SHA-256 of all files and `SHA256SUMS.sig`, an Ed25519 signature over it. Only Retrowork holds the private key; it is not stored in any repository. Only what is signed with this key is official.
 
-Fingerprint of the public key (SHA-256 over the key in DER form):
+Fingerprint of the public key [`schluessel/release-ed25519.pub`](schluessel/release-ed25519.pub) (SHA-256 over the key in DER form):
 
 ```
-will be added with the first release
+SHA256:6db970b09f586927f6f216b317c831261b95b254e29219d2a402e4c30d4a6c41
 ```
 
 The same fingerprint is published on the second channel `https://lizenz.retrowork.de/keyhelp-legacy-php-interpreter/`, together with the list of valid and revoked releases. `install.sh` prints it on every run. Verifying by hand and details: [docs/en/signing.md](docs/en/signing.md).

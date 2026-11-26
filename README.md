@@ -68,12 +68,12 @@ Einzelheiten, Exit-Codes und Fehlersuche: [docs/betrieb.md](docs/betrieb.md).
 
 ## Manipulationsschutz
 
-Jedes Release enthält `SHA256SUMS` mit den SHA-256 aller Dateien und `SHA256SUMS.sig`, eine Ed25519-Signatur darüber. Den privaten Schlüssel hat nur Retrowork, offline. Offiziell ist nur, was mit diesem Schlüssel signiert ist.
+Jedes Release enthält `SHA256SUMS` mit den SHA-256 aller Dateien und `SHA256SUMS.sig`, eine Ed25519-Signatur darüber. Den privaten Schlüssel hat nur Retrowork; er liegt in keinem Repository. Offiziell ist nur, was mit diesem Schlüssel signiert ist.
 
-Fingerabdruck des öffentlichen Schlüssels (SHA-256 über den Schlüssel in DER-Form):
+Fingerabdruck des öffentlichen Schlüssels [`schluessel/release-ed25519.pub`](schluessel/release-ed25519.pub) (SHA-256 über den Schlüssel in DER-Form):
 
 ```
-wird mit dem ersten Release eingetragen
+SHA256:6db970b09f586927f6f216b317c831261b95b254e29219d2a402e4c30d4a6c41
 ```
 
 Derselbe Fingerabdruck steht auf dem zweiten Kanal `https://lizenz.retrowork.de/keyhelp-legacy-php-interpreter/`, zusammen mit der Liste der gültigen und der widerrufenen Releases. `install.sh` zeigt ihn bei jedem Lauf an. Selbst prüfen und Einzelheiten: [docs/signatur.md](docs/signatur.md).

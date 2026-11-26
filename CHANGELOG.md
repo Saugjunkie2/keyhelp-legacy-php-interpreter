@@ -11,6 +11,7 @@ Erstes öffentliches Release. / First public release.
 - KeyHelps Paket `php_5.6.40_20261103164601.tar.gz` (SHA-256 `4ee240d31be9f1cc5cba853728b3bc6fe4aceaa18a1a0a3dafd0d282dbf5b6c6`) wird beim Nutzer von `repo.keyhelp.de` geladen. / KeyHelp's package is downloaded on the user's server.
 - Neu: `install.sh` 1.0.0, Installation und Update mit einem Befehl, prüft die Ed25519-Signatur, jede Datei, Widerrufe auf dem zweiten Kanal und ältere Releases. / New: one-command installation and update with signature, checksum, revocation and downgrade checks.
 - Neu: Werkzeuge 1.0.0 unter `werkzeuge/` (Schlüssel erzeugen, Release bauen, signieren und prüfen, Freigabeliste) und Tests unter `tests/`. / New: release tools and tests.
+- Öffentlicher Schlüssel `schluessel/release-ed25519.pub`, Fingerabdruck `SHA256:6db970b09f586927f6f216b317c831261b95b254e29219d2a402e4c30d4a6c41`. / Public key and its fingerprint.
 
 ## Geplant / Planned
 
