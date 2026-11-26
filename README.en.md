@@ -87,6 +87,8 @@ The same fingerprint and the key are published on the second channel `https://li
 
 ## What has been tested
 
+The figures apply to release 0.4.15 (installer 0.4.15, `install.sh` 1.0.0). The tests of version 0.4.17 are running; their figures will appear here with the release.
+
 | Test | Result | How |
 |---|---|---|
 | Functional comparison with KeyHelp's 5.6 on Debian 12 | 2,066 checks equal, 15 justified exceptions, none unjustified; the test across cli, cgi and fpm produces byte-identical output as on Debian 12 | on a test server with Debian 13 and KeyHelp, reference in a Debian 12 environment |

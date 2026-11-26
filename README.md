@@ -87,6 +87,8 @@ Derselbe Fingerabdruck und der Schlüssel stehen auf dem zweiten Kanal `https://
 
 ## Was geprüft ist
 
+Die Zahlen gelten für Release 0.4.15 (Installer 0.4.15, `install.sh` 1.0.0). Die Tests der Fassung 0.4.17 laufen; ihre Zahlen stehen hier mit dem Release.
+
 | Prüfung | Ergebnis | Wie geprüft |
 |---|---|---|
 | Funktionsvergleich mit KeyHelps 5.6 unter Debian 12 | 2.066 Prüfpunkte gleich, 15 begründete Ausnahmen, keine unbegründete; der Test über cli, cgi und fpm liefert byte-gleiche Ausgaben wie unter Debian 12 | auf einem Testserver mit Debian 13 und KeyHelp, Referenz in einer Debian-12-Umgebung |
