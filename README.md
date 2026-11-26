@@ -87,15 +87,15 @@ Derselbe Fingerabdruck und der Schlüssel stehen auf dem zweiten Kanal `https://
 
 ## Was geprüft ist
 
-Die Zahlen gelten für Release 0.4.15 (Installer 0.4.15, `install.sh` 1.0.0). Die Tests der Fassung 0.4.17 laufen; ihre Zahlen stehen hier mit dem Release.
+Stand: Fassung 0.4.17. Ergänzungssatz 1.1.0 und KeyHelps Paket sind seit Release 0.4.15 unverändert; Funktionsvergleich, Einsatz unter KeyHelp und Loader gelten deshalb weiter. Installer, `install.sh` und Werkzeuge sind mit 0.4.17 geprüft.
 
 | Prüfung | Ergebnis | Wie geprüft |
 |---|---|---|
 | Funktionsvergleich mit KeyHelps 5.6 unter Debian 12 | 2.066 Prüfpunkte gleich, 15 begründete Ausnahmen, keine unbegründete; der Test über cli, cgi und fpm liefert byte-gleiche Ausgaben wie unter Debian 12 | auf einem Testserver mit Debian 13 und KeyHelp, Referenz in einer Debian-12-Umgebung |
-| Installer: Installation, Update, Rückbau und 58 Fehler- und Abbruchfälle | alle wie erwartet; nach dem Rückbau gleicher Paketstand wie vorher | in einer minimalen Debian-13-Umgebung (Chroot) |
-| Einsatz unter KeyHelp | 5.6 im Panel wählbar, KeyHelp legt Pool und VHost an und startet den Dienst; Websites, Neustart, KeyHelps Wartungsjobs; Update mit unter einer Sekunde Ausfall | auf dem Testserver; Sichtprüfung im Panel durch Retrowork |
+| Installer 0.4.17: Installation, Update, Rückbau, Fehler und Abbrüche in 78 Fällen | alle wie erwartet; nach jedem Rückbau gleicher Paketstand wie vorher | in einer minimalen Debian-13-Umgebung (Chroot) |
+| Einsatz unter KeyHelp | 5.6 im Panel wählbar, KeyHelp legt Pool und VHost an und startet den Dienst; Websites, Neustart, KeyHelps Wartungsjobs; Update mit unter einer Sekunde Ausfall (gemessen mit Installer 0.4.14) | auf dem Testserver; Sichtprüfung im Panel durch Retrowork |
 | ionCube- und SourceGuardian-Loader | laden und arbeiten wie unter Debian 12, auch mit einer 2010 für PHP 5 verschlüsselten Anwendungsdatei | in Chroots und auf dem Testserver |
-| `install.sh` und die Werkzeuge für Releases | Signatur, Prüfsummen, Widerruf, ältere Releases und Start des Installers in 90 Fällen wie erwartet; ein signiertes Test-Release über sein `install.sh` als Update eingespielt, im leichten und im vollen Zweig, danach `check` und die Website in Ordnung; das veröffentlichte Release 0.4.15 mit dem Befehl aus diesem README von GitHub eingespielt, Signatur und Freigabeliste gültig | unter Windows (Git Bash) und als root in einer Debian-13-Chroot; Ende-zu-Ende auf dem Testserver ([tests/](tests/)) |
+| `install.sh` 1.1.1 und die Werkzeuge für Releases | Signatur, Prüfsummen, Freigabeliste mit Generation und Ablaufdatum, Widerruf, Schlüsselwechsel, festgehaltener Schlüssel, ältere Releases und Start des Installers in 149 Fällen wie erwartet; ein signiertes Test-Release mit Installer 0.4.17 über sein `install.sh` als Update eingespielt, im leichten und im vollen Zweig, danach `check` und die Website in Ordnung; der Prüfweg vor dem Start wörtlich mit zwei Gegenproben; das Release 0.4.15 mit dem Befehl aus diesem README von GitHub eingespielt, Signatur und Freigabeliste gültig | unter Windows (Git Bash) und als root in einer Debian-13-Chroot; Ende-zu-Ende auf dem Testserver ([tests/](tests/)) |
 
 Die öffentliche CI (`.github/workflows/tests.yml`) führt die Tests von `install.sh` und den Werkzeugen unter Ubuntu und als root unter Debian 13 aus, prüft die Herkunft des Quellpakets uw-imap und täglich das veröffentlichte Release mit dem zweiten Kanal. Die Funktions- und Installertests laufen bisher auf einem Testserver von Retrowork; ihre Ergebnisse stehen hier, die Tests selbst noch nicht.
 

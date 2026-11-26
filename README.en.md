@@ -87,15 +87,15 @@ The same fingerprint and the key are published on the second channel `https://li
 
 ## What has been tested
 
-The figures apply to release 0.4.15 (installer 0.4.15, `install.sh` 1.0.0). The tests of version 0.4.17 are running; their figures will appear here with the release.
+Status: version 0.4.17. Supplement 1.1.0 and KeyHelp's package are unchanged since release 0.4.15; the functional comparison, use with KeyHelp and the loaders therefore still apply. Installer, `install.sh` and tools are tested with 0.4.17.
 
 | Test | Result | How |
 |---|---|---|
 | Functional comparison with KeyHelp's 5.6 on Debian 12 | 2,066 checks equal, 15 justified exceptions, none unjustified; the test across cli, cgi and fpm produces byte-identical output as on Debian 12 | on a test server with Debian 13 and KeyHelp, reference in a Debian 12 environment |
-| Installer: installation, update, removal and 58 error and abort cases | all as expected; after removal the same package state as before | in a minimal Debian 13 environment (chroot) |
-| Use with KeyHelp | 5.6 selectable in the panel, KeyHelp creates pool and vhost and starts the service; websites, reboot, KeyHelp's maintenance jobs; update with less than one second of downtime | on the test server; visual check in the panel by Retrowork |
+| Installer 0.4.17: installation, update, removal, errors and aborts in 78 cases | all as expected; after every removal the same package state as before | in a minimal Debian 13 environment (chroot) |
+| Use with KeyHelp | 5.6 selectable in the panel, KeyHelp creates pool and vhost and starts the service; websites, reboot, KeyHelp's maintenance jobs; update with less than one second of downtime (measured with installer 0.4.14) | on the test server; visual check in the panel by Retrowork |
 | ionCube and SourceGuardian loaders | load and work as on Debian 12, including an application file encoded for PHP 5 in 2010 | in chroots and on the test server |
-| `install.sh` and the release tools | signature, checksums, revocation, older releases and installer start as expected in 90 cases; a signed test release applied as an update through its `install.sh`, in the light and the full branch, afterwards `check` and the website fine; the published release 0.4.15 applied from GitHub with the command from this README, signature and release list valid | on Windows (Git Bash) and as root in a Debian 13 chroot; end to end on the test server ([tests/](tests/)) |
+| `install.sh` 1.1.1 and the release tools | signature, checksums, release list with generation and expiry date, revocation, key change, pinned key, older releases and installer start as expected in 149 cases; a signed test release with installer 0.4.17 applied as an update through its `install.sh`, in the light and the full branch, afterwards `check` and the website fine; the verify-before-start path literally with two counter-probes; release 0.4.15 applied from GitHub with the command from this README, signature and release list valid | on Windows (Git Bash) and as root in a Debian 13 chroot; end to end on the test server ([tests/](tests/)) |
 
 The public CI (`.github/workflows/tests.yml`) runs the tests of `install.sh` and the tools on Ubuntu and as root on Debian 13, verifies the origin of the uw-imap source package and checks the published release with the second channel daily. The functional and installer tests so far run on a Retrowork test server; their results are shown here, the tests themselves are not published yet.
 

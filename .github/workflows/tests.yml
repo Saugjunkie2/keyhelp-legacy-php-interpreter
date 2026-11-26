@@ -20,7 +20,7 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: bash tests/werkzeuge-test.sh
 
   werkzeuge-debian13:
@@ -30,7 +30,7 @@ jobs:
     container: debian:trixie
     steps:
       - run: apt-get update -q && apt-get install -y -q --no-install-recommends openssl ca-certificates git
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: bash tests/werkzeuge-test.sh
 
   herkunft:
@@ -38,12 +38,12 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: bash werkzeuge/sury-echtheit-pruefen.sh
 
   veroeffentlichung:
     name: Veröffentlichtes Release und zweiter Kanal
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: bash tests/veroeffentlichung-pruefen.sh
