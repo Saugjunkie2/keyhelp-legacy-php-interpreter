@@ -1,5 +1,7 @@
 #!/bin/bash
-# werkzeuge-test.sh - Version 1.0.0
+# werkzeuge-test.sh - Version 1.0.1
+# 1.0.1: Teil B entfernt auch install-sh.log, wenn der Test es angelegt hat und der Ordner
+#        /var/log/khli-php56 schon vorher bestand (1.0.0 ließ die Datei dann liegen)
 # Prüft install.sh und die Werkzeuge unter werkzeuge/ mit Wegwerf-Schlüsseln und Attrappen; es
 # installiert nichts und braucht kein Netz.
 #   Teil A, überall (Linux, Git Bash unter Windows), ohne root: Schlüssel erzeugen, Release bauen,
@@ -21,11 +23,12 @@ WERKZEUG=werkzeuge-test
 for w in openssl sha256sum awk sed cmp; do command -v "$w" > /dev/null || fehler "$w fehlt" 4; done
 
 t=$(mktemp -d "${TMPDIR:-/tmp}/khli-test.XXXXXX")
-B_ZUSTAND=0 B_PROTOKOLL=0
+B_ZUSTAND=0 B_PROTOKOLL=0 B_LOGDATEI=0
 aufraeumen() {
   rm -rf -- "$t"
   if [ "$B_ZUSTAND" = 1 ]; then rm -rf /var/lib/khli-php56; fi
   if [ "$B_PROTOKOLL" = 1 ]; then rm -rf /var/log/khli-php56; fi
+  if [ "$B_LOGDATEI" = 1 ]; then rm -f /var/log/khli-php56/install-sh.log; fi
   rm -rf /tmp/khli-test-nobody
 }
 trap aufraeumen EXIT
@@ -87,7 +90,7 @@ signieren() {
 }
 kopie() { rm -rf -- "$t/$2"; cp -r -- "$t/$1" "$t/$2"; }
 
-printf 'werkzeuge-test 1.0.0, %s, %s\n' "$(openssl version)" "$(uname -s)"
+printf 'werkzeuge-test 1.0.1, %s, %s\n' "$(openssl version)" "$(uname -s)"
 
 # Testbaum: install.sh und werkzeuge/ aus diesem Repository, Attrappen von Installer und Ergänzungssatz
 r=$t/repo
@@ -251,6 +254,7 @@ if [ "$(id -u)" = 0 ] && [ "$(cut -d. -f1 /etc/debian_version 2> /dev/null)" = 1
    && [ "$(dpkg --print-architecture 2> /dev/null)" = amd64 ] && [ ! -e /var/lib/khli-php56 ] && [ ! -e /opt/keyhelp/php/5.6 ]; then
   echo "== Teil B: install.sh startet den Installer (Attrappe)"
   [ -e /var/log/khli-php56 ] || B_PROTOKOLL=1
+  [ -e /var/log/khli-php56/install-sh.log ] || B_LOGDATEI=1
   B_ZUSTAND=1
   export KHLI_TEST_AUFRUF=$t/aufruf.txt
   rm -f "$KHLI_TEST_AUFRUF"
