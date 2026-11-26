@@ -1,9 +1,9 @@
 #!/bin/bash
-# khli-php56.sh - Version 0.4.15 ENTWURF (Lauf P5, 2026-11-25)
-# Projekt keyhelp-legacy-interpreter: PHP 5.6 für KeyHelp unter Debian 13 (amd64).
+# khli-php56.sh - Version 0.4.16 (2026-11-26)
+# Projekt keyhelp-legacy-php-interpreter: PHP 5.6 für KeyHelp unter Debian 13 (amd64).
 #
-# Installiert KeyHelps eigenen PHP-5.6-Interpreter für Debian 12 unverändert unter
-# /opt/keyhelp/php/5.6 und ergänzt nur, was Debian 13 nicht mehr liefert:
+# Installiert KeyHelps eigenen PHP-5.6-Interpreter für Debian 12 aus dem unveränderten Originalarchiv
+# unter /opt/keyhelp/php/5.6 und ändert oder ergänzt nur, was Debian 13 verlangt (F-023):
 #   - privat gebaute Bibliotheken unter /opt/keyhelp/php/5.6/lib/khli (Ergänzungssatz)
 #   - RUNPATH in sechs Erweiterungen (gd, imagick, imap, ldap, tidy, ssh2) auf lib/khli/lib und in
 #     der gebündelten libicuuc.so.69 auf den eigenen Ordner (statt einer Kopie im Systemordner);
@@ -15,8 +15,8 @@
 # Aufruf als root:
 #   khli-php56.sh install   [--original <datei>] [--ergaenzung <datei>] [--ergaenzung-sha256 <wert>]
 #   khli-php56.sh update    [--original <datei>] [--ergaenzung <datei>] [--ergaenzung-sha256 <wert>]
-#                           [--neu-aufbauen] [--trotz-fremdem-ordner]
-#   khli-php56.sh check     [--cron]
+#                           [--neu-aufbauen] [--trotz-fremdem-ordner] [--aelter-erlauben]
+#   khli-php56.sh check     [--cron | --module-merken]
 #   khli-php56.sh status
 #   khli-php56.sh uninstall [--pakete-behalten] [--trotz-domains] [--trotz-fremdem-ordner]
 #
@@ -29,11 +29,15 @@
 #              mit Terminal), kommt der bisherige Ordner zurück und der Dienst wird wieder gestartet; reißt
 #              eine Sitzung ohne Terminal ab, kommt kein Signal: der Lauf geht zu Ende und schreibt weiter
 #              ins Protokoll; nach SIGKILL oder Stromausfall holt der nächste update den bisherigen Ordner
-#              zurück, wenn das Ziel fehlt, sonst bleibt er mit Warnung liegen, bis uninstall ihn entfernt
+#              zurück, wenn das Ziel fehlt, sonst bleibt er mit Warnung liegen, bis uninstall ihn entfernt;
+#              ab 0.4.16 nur, wenn der Dienst wirklich angehalten ist, und eine ältere Fassung über eine
+#              neuere nur mit --aelter-erlauben
 #   check      Dateien, Bibliotheken, Module, FPM-Konfiguration und Dienst; mit --cron nur Befunde
-#              (tägliche Prüfung über /etc/cron.d/khli-php56, cron schickt die Ausgabe an root)
-#   uninstall  nur, wenn feststeht, dass nichts 5.6 nutzt (Domains, geplante Aufgaben, Standard-
-#              Interpreter, Pools, Crontabs); sichert vorher etc/, config.ini und Protokolle
+#              (tägliche Prüfung über /etc/cron.d/khli-php56, cron schickt die Ausgabe an root); mit
+#              --module-merken gilt der jetzige Stand der Module als gewollt
+#   uninstall  nur, wenn die geprüften Nutzungen fehlen (KeyHelps Domains, geplante Aufgaben und
+#              Standard-Interpreter, Pools, Crontabs, systemd-Units); andere Aufrufe von PHP 5.6, etwa aus
+#              eigenen Skripten, erkennt er nicht; sichert vorher etc/, config.ini und Protokolle
 #   --ohne-keyhelp (install, update) nur für Tests in einer Chroot ohne KeyHelp
 #
 # Ohne --original lädt der Installer das Paket von KeyHelps Originalquelle und prüft den SHA-256.
@@ -49,6 +53,17 @@
 #       bricht ein Befehl unter set -e ab, endet der Lauf mit dessen Status, etwa 100 (apt-get) oder
 #       2 (tar, sort, dpkg-query; dann kein falscher Aufruf); seine Fehlermeldung steht im Protokoll
 #
+# 0.4.16: Befunde der Drittprüfung vom 26.11.2026: check wertet den Exit-Code von php -m und ldd aus,
+#        verlangt die Grundmodule und meldet Module, die gegenüber der letzten erfolgreichen Prüfung
+#        fehlen (Liste im Zustand, check --module-merken übernimmt den jetzigen Stand; F-006); die
+#        Rücknahme gilt nur als gelungen, wenn auch Zustand, ELF-Tabelle und Dienst zurück sind (F-007);
+#        update tauscht nur, wenn der Dienst wirklich angehalten ist (F-008); apt entfernt nie Pakete
+#        (Plan mit Entfernungen abgelehnt, --no-remove), angehobene Pakete werden genannt (F-009);
+#        update spielt eine ältere Fassung nur mit --aelter-erlauben ein, geprüft unter der Sperre (F-004);
+#        Originalpaket und Ergänzungssatz werden vor der Prüfung in den eigenen Arbeitsordner kopiert und
+#        nur von dort benutzt (F-013); Werkzeug, Fassung und Modulliste stehen vor der Bestätigung des
+#        Tauschs (F-014); Pakete aus dem Lauf von KeyHelps install.sh gelten nicht mehr als eigene (F-015);
+#        uninstall erkennt auch systemd-Units, die PHP 5.6 aufrufen (F-016)
 # 0.4.15: Befunde der Gegenprüfung P5 (docs/reviews/2026-11-25_gegenpruefung-p5.md): der leichte Zweig von
 #        update sichert etc/, config.ini und Protokolle, bevor er den Schalter ändert (I-52); check versteht
 #        null und einen Kommentar hinter dem Wert wie PHPs INI-Leser und nennt eine fehlende config.ini;
@@ -145,7 +160,7 @@ umask 022
 export LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-KHLI_VERSION=0.4.15
+KHLI_VERSION=0.4.16
 PHP_KURZ=56
 PHP_VER=5.6
 ZIEL=/opt/keyhelp/php/$PHP_VER
@@ -207,6 +222,8 @@ RUECKNAHME_OK=0
 RUECKNAHME_SIGNAL=0
 ZURUECKGEHOLT=0
 HINWEIS_OHNE_KEYHELP=0
+# Rücknahme ohne Zustand oder ELF-Tabelle: der Arbeitsordner mit ihren Sicherungen bleibt (0.4.16, F-007)
+ARBEIT2_BEHALTEN=0
 
 meldung() { printf 'khli-php56: %s\n' "$*" 2>/dev/null || true; }
 fehler() {
@@ -244,8 +261,16 @@ dienst_befehl() {
 }
 
 dienst_anhalten() {
-  # KeyHelps Startskript erkennt den Prozess an seinem Programmpfad; deshalb vor jedem Tausch
-  if [ -x "/etc/init.d/$DIENST" ]; then dienst_befehl stop > /dev/null 2>&1 9>&- || true; fi
+  # KeyHelps Startskript erkennt den Prozess an seinem Programmpfad; deshalb vor jedem Tausch. Ab 0.4.16
+  # Rückgabe 1, wenn der Dienst nach dem Anhalten noch läuft: gewartet wird bis zu zehn Sekunden nach der
+  # Uhr (F-008)
+  [ -x "/etc/init.d/$DIENST" ] || return 0
+  if ! test_stopp_scheitert; then dienst_befehl stop > /dev/null 2>&1 9>&- || true; fi
+  local ende=$((SECONDS + 10))
+  while fpm_laeuft; do
+    [ "$SECONDS" -lt "$ende" ] || return 1
+    sleep 1 || true
+  done
   return 0
 }
 
@@ -286,6 +311,31 @@ test_ruecknahme_scheitert() {
   { [ "$OHNE_KEYHELP" = 1 ] || [ "$(zustand_wert OHNE_KEYHELP)" = 1 ]; } && ! keyhelp_da && [ "${KHLI_TEST_RUECKNAHME:-}" = scheitern ]
 }
 
+test_ruecknahme_dienst_scheitert() {
+  # nur im Testmodus ohne KeyHelp: der Dienst startet in der Rücknahme nicht wieder (0.4.16, F-007)
+  { [ "$OHNE_KEYHELP" = 1 ] || [ "$(zustand_wert OHNE_KEYHELP)" = 1 ]; } && ! keyhelp_da && [ "${KHLI_TEST_RUECKNAHME:-}" = dienst ]
+}
+
+test_stopp_scheitert() {
+  # nur im Testmodus ohne KeyHelp: service stop hält den Dienst nicht an (0.4.16, F-008)
+  { [ "$OHNE_KEYHELP" = 1 ] || [ "$(zustand_wert OHNE_KEYHELP)" = 1 ]; } && ! keyhelp_da && [ "${KHLI_TEST_STOPP:-}" = scheitern ]
+}
+
+test_apt_entfernt() {
+  # nur im Testmodus ohne KeyHelp: der Plan von apt enthält eine Entfernung (0.4.16, F-009)
+  { [ "$OHNE_KEYHELP" = 1 ] || [ "$(zustand_wert OHNE_KEYHELP)" = 1 ]; } && ! keyhelp_da && [ "${KHLI_TEST_APT:-}" = entfernen ]
+}
+
+test_eingabe_tauschen() {
+  # nur im Testmodus ohne KeyHelp: nach der Prüfung wird die angegebene Originaldatei überschrieben; der
+  # Lauf muss mit seiner Kopie weitergehen (0.4.16, F-013)
+  if { [ "$OHNE_KEYHELP" = 1 ] || [ "$(zustand_wert OHNE_KEYHELP)" = 1 ]; } && ! keyhelp_da && [ "${KHLI_TEST_EINGABE:-}" = tauschen ] && [ -n "$OPT_ORIGINAL" ]; then
+    meldung "Testtausch: $OPT_ORIGINAL wird nach der Prüfung überschrieben"
+    printf 'ausgetauscht\n' > "$OPT_ORIGINAL"
+  fi
+  return 0
+}
+
 test_zweites_signal() {
   # nur im Testmodus ohne KeyHelp und nur im Tausch: schickt zu Beginn des Aufräumens ein weiteres Signal
   # an diesen Prozess, genau in das Fenster, in dem es bis 0.4.12 das Aufräumen abbrach (N44, I-50)
@@ -311,9 +361,13 @@ zuruecknehmen_ablauf() {
     TAUSCH_PHASE=""
     return 0
   fi
+  local unvollstaendig=""
   if [ -n "$ARBEIT2" ] && [ -d "$ARBEIT2/alt" ]; then
     if [ -e "$ZIEL" ]; then
-      dienst_anhalten
+      if ! dienst_anhalten; then
+        meldung "Warnung: $DIENST läuft nach dem Anhalten noch (aus dem neuen Ordner)"
+        unvollstaendig="$unvollstaendig Anhalten"
+      fi
       testabbruch ruecknahme
       if ! ohne_signale mv -T "$ZIEL" "$ARBEIT2/neu-fehlerhaft"; then
         meldung "Warnung: neuer Ordner lässt sich nicht beiseitelegen; bisheriger Ordner liegt in $ARBEIT2/alt"
@@ -325,14 +379,28 @@ zuruecknehmen_ablauf() {
       ruecknahme_gescheitert; return 1
     fi
   fi
-  if [ -n "$ARBEIT2" ] && [ -f "$ARBEIT2/zustand-alt.env" ]; then ohne_signale cp "$ARBEIT2/zustand-alt.env" "$ZUSTAND/zustand.env" || true; fi
-  if [ -n "$ARBEIT2" ] && [ -f "$ARBEIT2/elf-alt.tsv" ]; then ohne_signale cp "$ARBEIT2/elf-alt.tsv" "$ZUSTAND/elf-aenderungen.tsv" || true; fi
+  # ab 0.4.16 zählt jeder dieser Schritte: nur wenn alle gelingen, ist der bisherige Stand wiederhergestellt
+  # (F-007); scheitert Zustand oder ELF-Tabelle, bleibt der Arbeitsordner mit ihren Sicherungen stehen
+  if [ -n "$ARBEIT2" ] && [ -f "$ARBEIT2/zustand-alt.env" ]; then
+    ohne_signale cp "$ARBEIT2/zustand-alt.env" "$ZUSTAND/zustand.env" || { unvollstaendig="$unvollstaendig Zustand"; ARBEIT2_BEHALTEN=1; }
+  fi
+  if [ -n "$ARBEIT2" ] && [ -f "$ARBEIT2/elf-alt.tsv" ]; then
+    ohne_signale cp "$ARBEIT2/elf-alt.tsv" "$ZUSTAND/elf-aenderungen.tsv" || { unvollstaendig="$unvollstaendig ELF-Tabelle"; ARBEIT2_BEHALTEN=1; }
+  fi
   if [ "$LIEF" = 1 ] || pools_da; then
-    dienst_neu_starten || meldung "Warnung: $DIENST startet auch mit dem bisherigen Ordner nicht; Abhilfe: systemctl restart $DIENST"
+    if test_ruecknahme_dienst_scheitert || ! dienst_neu_starten; then
+      meldung "Warnung: $DIENST startet auch mit dem bisherigen Ordner nicht; Abhilfe: systemctl restart $DIENST"
+      unvollstaendig="$unvollstaendig Dienst"
+    fi
+  fi
+  TAUSCH_PHASE=""
+  if [ -n "$unvollstaendig" ]; then
+    zustand_setzen STATUS=fehlerhaft || true
+    meldung "bisheriger Ordner zurückgelegt, aber nicht vollständig wiederhergestellt:$unvollstaendig; Zustand fehlerhaft; 'khli-php56 check' zeigt den Stand, 'update --neu-aufbauen' baut neu auf"
+    return 1
   fi
   meldung "bisheriger Stand wiederhergestellt"
   RUECKNAHME_OK=1
-  TAUSCH_PHASE=""
   return 0
 }
 
@@ -360,6 +428,8 @@ aufraeumen() {
   if [ -n "$ARBEIT2" ] && [ -d "$ARBEIT2/alt" ] && [ "$TAUSCH_OK" != 1 ]; then
     # Sicherheitsnetz: ein bisheriger Ordner wird nur nach bestätigtem Tausch gelöscht (I-24)
     meldung "Warnung: der bisherige Ordner bleibt in $ARBEIT2/alt (Tausch nicht bestätigt)"
+  elif [ -n "$ARBEIT2" ] && [ "$ARBEIT2_BEHALTEN" = 1 ]; then
+    meldung "Warnung: der Arbeitsordner $ARBEIT2 bleibt (Sicherungen von Zustand und ELF-Tabelle)"
   elif [ -n "$ARBEIT2" ]; then
     ohne_signale rm -rf "$ARBEIT2"
   fi
@@ -537,6 +607,14 @@ pakete_installieren() {
   "${APT[@]}" update 9>&-
   # shellcheck disable=SC2086
   plan=$("${APT[@]}" -s install --no-install-recommends $fehlt 9>&-) || fehler "apt kann$fehlt nicht installieren" 1
+  # ab 0.4.16 entfernt die Installation nie ein Paket: ein Plan mit Entfernungen wird abgelehnt, bevor apt
+  # etwas ändert, und der echte Lauf hat --no-remove; Pakete, die apt dabei anhebt, werden genannt (F-009)
+  local entfernt angehoben
+  entfernt=$(awk '/^Remv / {print $2}' <<< "$plan" | sort -u | tr '\n' ' ')
+  if test_apt_entfernt; then entfernt="${entfernt}khli-testpaket "; fi
+  [ -z "$entfernt" ] || fehler "apt würde für$fehlt diese Pakete entfernen: ${entfernt% }; nichts installiert, der Installer entfernt nie fremde Pakete" 1
+  angehoben=$(awk '/^Inst / && $3 ~ /^\[/ {print $2}' <<< "$plan" | sort -u | tr '\n' ' ')
+  [ -z "$angehoben" ] || meldung "Hinweis: apt hebt dabei vorhandene Pakete auf eine neuere Fassung: $angehoben"
   geplant=$(awk '/^Inst / && $3 !~ /^\[/ {print $2}' <<< "$plan" | sort -u)
   if [ -n "$geplant" ]; then printf '%s\n' "$geplant" >> "$ZUSTAND/pakete-geplant.txt"; fi
   sort -u -o "$ZUSTAND/pakete-geplant.txt" "$ZUSTAND/pakete-geplant.txt"
@@ -548,7 +626,7 @@ pakete_installieren() {
   manuell_liste > "$ZUSTAND/.manuell-vorher-lauf"
   lauf="$(date -u +%Y%m%dT%H%M%SZ)-$$"
   # shellcheck disable=SC2086
-  "${APT[@]}" -o "Khli::Lauf=$lauf" install -y --no-install-recommends $fehlt 9>&-
+  "${APT[@]}" -o "Khli::Lauf=$lauf" install -y --no-remove --no-install-recommends $fehlt 9>&-
   testabbruch nach_apt
   eigen=$(lauf_pakete "$lauf")
   if [ -n "$eigen" ]; then
@@ -654,6 +732,11 @@ eingaben_pruefen() {
   local original=$1 ergaenzung=$2 erg_sha=$3 soll
   if [ -n "$original" ]; then
     [ -f "$original" ] || fehler "Originalpaket nicht gefunden: $original" 4
+    # ab 0.4.16 zuerst in den eigenen Arbeitsordner (nur root) kopieren und nur die Kopie prüfen und
+    # benutzen: liegt die Datei in einem Ordner, den andere beschreiben dürfen, könnte sie sonst zwischen
+    # Prüfung und Entpacken getauscht werden (F-013)
+    cp -- "$original" "$ARBEIT/$ORIGINAL_NAME" || fehler "Originalpaket lässt sich nicht nach $ARBEIT kopieren" 1
+    original=$ARBEIT/$ORIGINAL_NAME
   else
     original=$ARBEIT/$ORIGINAL_NAME
     meldung "lade $ORIGINAL_URL"
@@ -673,6 +756,9 @@ eingaben_pruefen() {
     [ -f "$ergaenzung" ] || ergaenzung=$hier/ergaenzung/$ERGAENZUNG_NAME
   fi
   [ -f "$ergaenzung" ] || fehler "Ergänzungssatz nicht gefunden: $ergaenzung" 4
+  # ebenso der Ergänzungssatz (0.4.16, F-013); der Name bleibt, ihn hält der Zustand fest
+  cp -- "$ergaenzung" "$ARBEIT/$(basename -- "$ergaenzung")" || fehler "Ergänzungssatz lässt sich nicht nach $ARBEIT kopieren" 1
+  ergaenzung=$ARBEIT/$(basename -- "$ergaenzung")
   # Der fest eingetragene SHA-256 gilt für den mitgelieferten Satz; ein anderer Satz nur mit
   # ausdrücklich angegebener Prüfsumme (Entwicklung, neue Bauten)
   soll=${erg_sha:-$ERGAENZUNG_SHA256}
@@ -733,14 +819,19 @@ baum_bauen() {
 
 keyhelp_install_sh() {
   # KeyHelps install.sh wie beim Wartungsjob php-update. Seine Pakete (libtidy58, libssh2-1t64,
-  # libpq5) sind schon über die eigene Erfassung installiert; was es darüber hinaus in seinem kurzen
-  # Lauf neu installiert, gehört ebenfalls zur Installation.
-  local rc=0
+  # libpq5) sind schon über die eigene Erfassung installiert; was in seinem kurzen Lauf neu dazukommt,
+  # zählt ab 0.4.16 nicht mehr zur Installation (F-015).
+  local rc=0 dazu
   installiert_liste > "$ZUSTAND/.vorher"
   meldung "führe KeyHelps $ZIEL/keyhelp-setup/install.sh aus"
   bash "$ZIEL/keyhelp-setup/install.sh" 9>&- || rc=$?
-  installiert_liste | comm -13 "$ZUSTAND/.vorher" - >> "$ZUSTAND/pakete-neu.txt"
-  sort -u -o "$ZUSTAND/pakete-neu.txt" "$ZUSTAND/pakete-neu.txt"
+  # ab 0.4.16 gelten Pakete, die in diesem Fenster dazukommen, nicht mehr als eigene: es kann auch ein
+  # anderer Lauf gewesen sein; uninstall lässt sie stehen, sie stehen nur in einer Liste (F-015)
+  dazu=$(installiert_liste | comm -13 "$ZUSTAND/.vorher" - || true)
+  if [ -n "$dazu" ]; then
+    printf '%s\n' "$dazu" >> "$ZUSTAND/pakete-waehrend-install-sh.txt"
+    meldung "Hinweis: während KeyHelps install.sh kamen Pakete dazu: $(tr '\n' ' ' <<< "$dazu"); sie gelten nicht als eigene, uninstall lässt sie stehen"
+  fi
   rm -f "$ZUSTAND/.vorher"
   zustand_setzen "INSTALL_SH_EXIT=$rc"
   [ "$rc" -eq 0 ] || meldung "Warnung: KeyHelps install.sh endete mit $rc"
@@ -903,6 +994,7 @@ install_befehl() {
   # 1. Eingaben prüfen, bevor irgendetwas verändert wird
   arbeitsordner_anlegen
   eingaben_pruefen "$OPT_ORIGINAL" "$OPT_ERGAENZUNG" "$OPT_ERG_SHA"
+  test_eingabe_tauschen
   # 2. Ab hier ändert der Installer das System; der Zustand entsteht zuerst, damit 'uninstall' auch
   #    nach einem Abbruch aufräumen kann
   mkdir -p "$ZUSTAND"
@@ -934,6 +1026,7 @@ install_befehl() {
   zustand_setzen STATUS=installiert "INSTALLIERT=$(datum)"
   # 6. Prüfung
   if check_befehl --still && [ "$(zustand_wert INSTALL_SH_EXIT)" = 0 ]; then
+    module_merken
     meldung "Installation abgeschlossen: PHP $("$ZIEL/bin/php" -r 'echo PHP_VERSION;' 2>/dev/null)"
     return 0
   fi
@@ -942,13 +1035,14 @@ install_befehl() {
 }
 
 update_befehl() {
-  local neu_aufbauen=0 trotz_fremd=0
+  local neu_aufbauen=0 trotz_fremd=0 aelter=0
   while [ $# -gt 0 ]; do
     optionen_eingaben "$@"
     if [ "$OPT_N" -gt 0 ]; then shift "$OPT_N"; continue; fi
     case "$1" in
       --neu-aufbauen) neu_aufbauen=1 ;;
       --trotz-fremdem-ordner) trotz_fremd=1 ;;
+      --aelter-erlauben) aelter=1 ;;
       *) fehler "unbekannte Option $1" 2 ;;
     esac
     shift
@@ -969,7 +1063,16 @@ update_befehl() {
   if [ "$(zustand_wert RUECKBAU)" = begonnen ]; then
     fehler "ein früherer uninstall wurde abgebrochen (RUECKBAU=begonnen); erst 'uninstall' wiederholen, dann 'install'" 1
   fi
+  # ab 0.4.16 prüft update selbst und unter der Sperre, ob es eine ältere Fassung über eine neuere legt (F-004)
+  local inst_version
+  inst_version=$(zustand_wert KHLI_VERSION)
+  if [ -n "$inst_version" ] && [ "$(printf '%s\n%s\n' "$inst_version" "$KHLI_VERSION" | sort -V | tail -n 1)" != "$KHLI_VERSION" ]; then
+    [ "$aelter" = 1 ] || fehler "installiert ist khli-php56 $inst_version, diese Fassung $KHLI_VERSION ist älter; nichts verändert (--aelter-erlauben spielt sie trotzdem ein)" 5
+  fi
   protokoll_start update
+  if [ -n "$inst_version" ] && [ "$aelter" = 1 ] && [ "$inst_version" != "$KHLI_VERSION" ] && [ "$(printf '%s\n%s\n' "$inst_version" "$KHLI_VERSION" | sort -V | tail -n 1)" != "$KHLI_VERSION" ]; then
+    meldung "Warnung: installiert ist $inst_version, eingespielt wird die ältere Fassung $KHLI_VERSION (--aelter-erlauben)"
+  fi
   if [ "$HINWEIS_OHNE_KEYHELP" = 1 ]; then meldung "Hinweis: der Zustand stammt aus einem Test ohne KeyHelp; KeyHelp ist jetzt da, update läuft mit KeyHelp"; fi
   alte_arbeitsordner_entfernen zurueckholen
   h=$(herkunft)
@@ -979,6 +1082,7 @@ update_befehl() {
   esac
   arbeitsordner_anlegen
   eingaben_pruefen "$OPT_ORIGINAL" "$OPT_ERGAENZUNG" "$OPT_ERG_SHA"
+  test_eingabe_tauschen
   zustand_migrieren
   zustand_setzen "OHNE_KEYHELP=$OHNE_KEYHELP"
   if [ "$h" = eigen ] && [ "$neu_aufbauen" = 0 ] && [ "$status" = installiert ] \
@@ -989,6 +1093,7 @@ update_befehl() {
     autoupdate_aus "$ZIEL"
     werkzeug_einrichten
     zustand_setzen "KHLI_VERSION=$KHLI_VERSION" "AKTUALISIERT=$(datum)"
+    module_merken
     meldung "Interpreter unverändert (Originalpaket und Ergänzungssatz wie installiert, check in Ordnung); Werkzeug und Zustand erneuert; --neu-aufbauen baut ihn trotzdem neu auf"
     return 0
   fi
@@ -1003,7 +1108,12 @@ update_befehl() {
     sicherung_anlegen update
     # ab hier nimmt die EXIT-Falle bei jedem Abbruch den Tausch zurück und startet den Dienst wieder
     TAUSCH_PHASE=angehalten
-    dienst_anhalten
+    if ! dienst_anhalten; then
+      # ab 0.4.16 kein Tausch, solange der bisherige Dienst noch läuft: der Ordner ist unverändert am
+      # Ziel, sein Dienst läuft weiter (F-008)
+      TAUSCH_PHASE=""
+      fehler "Dienst $DIENST ließ sich nicht anhalten; nichts getauscht, der bisherige Interpreter läuft weiter (Protokoll $PROTOKOLL)" 1
+    fi
     testabbruch angehalten
     uebernehmen "$ZIEL" "$neu"
     mv -T "$ZIEL" "$ARBEIT2/alt"
@@ -1020,11 +1130,14 @@ update_befehl() {
   keyhelp_install_sh
   testabbruch nach_install_sh
   if [ "$dienst_ok" = 1 ] && ! test_pruefung_scheitert && check_befehl --still && [ "$(zustand_wert INSTALL_SH_EXIT)" = 0 ]; then
+    # ab 0.4.16 erst Werkzeug, Fassung und Modulliste, dann gilt der Tausch als bestätigt; scheitert einer
+    # dieser Schritte, nimmt die EXIT-Falle den Tausch zurück (F-014)
+    werkzeug_einrichten
+    zustand_setzen "KHLI_VERSION=$KHLI_VERSION" "AKTUALISIERT=$(datum)"
+    module_merken
     TAUSCH_OK=1
     TAUSCH_PHASE=""
     if [ -d "$ARBEIT2/alt" ]; then unterschiede_melden "$ARBEIT2/alt" "$ZIEL"; fi
-    werkzeug_einrichten
-    zustand_setzen "KHLI_VERSION=$KHLI_VERSION" "AKTUALISIERT=$(datum)"
     meldung "update abgeschlossen: PHP $("$ZIEL/bin/php" -r 'echo PHP_VERSION;' 2>/dev/null); Dienst $([ "$LIEF" = 1 ] && echo 'lief vorher' || echo 'lief vorher nicht')$(pools_da && fpm_laeuft && echo ', läuft jetzt')"
     return 0
   fi
@@ -1044,15 +1157,38 @@ update_befehl() {
   fehler "update abgeschlossen, aber die Prüfung meldet Befunde (siehe oben)" 1
 }
 
+module_merken() {
+  # hält fest, welche Module php -m jetzt meldet, mit dem SHA-256 des Originalpakets in der ersten Zeile;
+  # check vergleicht damit, solange das Originalpaket dasselbe ist (0.4.16, F-006). Scheitert es, bleibt
+  # die bisherige Liste, und es gibt nur eine Warnung
+  local liste
+  [ -d "$ZUSTAND" ] || return 0
+  liste=$("$ZIEL/bin/php" -m 2>/dev/null) || { meldung "Warnung: php -m scheitert, Modulliste nicht festgehalten"; return 0; }
+  if { printf '# original %s\n' "$(zustand_wert ORIGINAL_SHA256)"; grep -vE '^\[|^$' <<< "$liste" | LC_ALL=C sort -u; } > "$ZUSTAND/module.txt.neu" 2> /dev/null; then
+    mv "$ZUSTAND/module.txt.neu" "$ZUSTAND/module.txt" || meldung "Warnung: Modulliste nicht geschrieben"
+  else
+    rm -f "$ZUSTAND/module.txt.neu"
+    meldung "Warnung: Modulliste nicht geschrieben"
+  fi
+  return 0
+}
+
 check_befehl() {
   local modus=normal
   case "${1:-}" in
     "") ;;
     --still) modus=still ;;
     --cron) modus=cron ;;
+    --module-merken) modus=merken ;;
     *) fehler "unbekannte Option $1" 2 ;;
   esac
   [ "$(id -u)" -eq 0 ] || fehler "nur als root" 4
+  if [ "$modus" = merken ]; then
+    # der jetzige Stand der Module gilt als gewollt, etwa nach einer bewussten Änderung an etc/conf.d
+    [ -f "$ZUSTAND/zustand.env" ] || fehler "kein Zustand unter $ZUSTAND" 1
+    module_merken
+    meldung "check: Modulliste übernommen ($(grep -vc '^#' "$ZUSTAND/module.txt" 2>/dev/null || true) Module)"
+  fi
   if [ "$modus" = cron ]; then
     # während eines Laufs von install, update oder uninstall nichts melden (keine Scheinbefunde)
     if [ -e "$SPERRE" ]; then
@@ -1090,18 +1226,39 @@ check_befehl() {
       [ "$(sha256sum "$ZIEL/$datei" 2>/dev/null | cut -c1-64 || true)" = "$neu" ] || { meldung "check: $datei weicht vom installierten Stand ab"; befunde=$((befunde + 1)); }
     done < "$ZUSTAND/elf-aenderungen.tsv"
   fi
-  local f fehlt
+  local f fehlt lout lrc
   # Die übrigen ICU-Bibliotheken finden einander nur über den RUNPATH von intl.so, schon im
   # Original unter Debian 12; geprüft wird deshalb intl.so selbst und die geänderte libicuuc.
   for f in "$ZIEL"/bin/php "$ZIEL"/bin/php-cgi "$ZIEL"/bin/phpdbg "$ZIEL/sbin/$DIENST" "$ZIEL"/$EXT/*.so "$ZIEL"/lib/icu/lib/libicuuc.so.69.1 "$ZIEL"/lib/khli/lib/*.so.*; do
     [ -L "$f" ] && continue
     [ -e "$f" ] || { meldung "check: ${f#"$ZIEL"/} fehlt"; befunde=$((befunde + 1)); continue; }
-    fehlt=$(ldd "$f" 2>/dev/null | awk '/not found/ {print $1}' | tr '\n' ' ' || true)
-    if [ -n "$fehlt" ]; then meldung "check: ${f#"$ZIEL"/} findet nicht: $fehlt"; befunde=$((befunde + 1)); fi
+    # ldd endet auch bei fehlenden Bibliotheken mit 0 und nennt sie; ab 0.4.16 zählt zusätzlich sein
+    # Exit-Code, etwa bei einer beschädigten Datei, die gar kein ELF mehr ist (F-006)
+    lrc=0
+    lout=$(ldd "$f" 2>&1) || lrc=$?
+    fehlt=$(awk '/not found/ {print $1}' <<< "$lout" | tr '\n' ' ' || true)
+    if [ -n "$fehlt" ]; then meldung "check: ${f#"$ZIEL"/} findet nicht: $fehlt"; befunde=$((befunde + 1))
+    elif [ "$lrc" -ne 0 ]; then meldung "check: ldd scheitert an ${f#"$ZIEL"/} (Exit $lrc): $(head -n 1 <<< "$lout")"; befunde=$((befunde + 1)); fi
   done
-  local warn
-  warn=$("$ZIEL/bin/php" -m 2>&1 >/dev/null | grep -iE 'warning|error|failed' || true)
-  if [ -n "$warn" ]; then meldung "check: php -m meldet: $warn"; befunde=$((befunde + 1)); else meldung "check: php -m ohne Startfehler, $("$ZIEL/bin/php" -m 2>/dev/null | grep -c -vE '^\[|^$' || true) Module"; fi
+  # php -m: ab 0.4.16 zählt der Exit-Code, die Grundmodule müssen da sein, und gegenüber der letzten
+  # erfolgreichen Prüfung (module.txt im Zustand, gleiches Originalpaket) darf kein Modul fehlen (F-006)
+  local warn mrc=0 liste module kern="" fehlen="" m
+  warn=$("$ZIEL/bin/php" -m 2>&1 >/dev/null) || mrc=$?
+  liste=$("$ZIEL/bin/php" -m 2>/dev/null || true)
+  module=$(grep -vE '^\[|^$' <<< "$liste" | LC_ALL=C sort -u || true)
+  if [ "$mrc" -ne 0 ]; then
+    meldung "check: php -m endet mit Exit $mrc$([ -n "$warn" ] && printf ': %s' "$(head -c 300 <<< "$warn" | tr '\n' ' ')")"; befunde=$((befunde + 1))
+  elif grep -qiE 'warning|error|failed' <<< "$warn"; then
+    meldung "check: php -m meldet: $(grep -iE 'warning|error|failed' <<< "$warn" | head -n 3 | tr '\n' ' ')"; befunde=$((befunde + 1))
+  else
+    for m in Core date pcre Reflection SPL standard; do grep -qxF "$m" <<< "$module" || kern="$kern $m"; done
+    if [ -n "$kern" ]; then meldung "check: php -m nennt die Grundmodule nicht:$kern"; befunde=$((befunde + 1)); fi
+    if [ -f "$ZUSTAND/module.txt" ] && [ "$(sed -n '1s/^# original //p' "$ZUSTAND/module.txt")" = "$(zustand_wert ORIGINAL_SHA256)" ]; then
+      fehlen=$(grep -v '^#' "$ZUSTAND/module.txt" | LC_ALL=C comm -23 - <(printf '%s\n' "$module") | tr '\n' ' ' || true)
+      if [ -n "$fehlen" ]; then meldung "check: gegenüber der letzten erfolgreichen Prüfung fehlen Module: ${fehlen% }; ist das gewollt, übernimmt 'khli-php56 check --module-merken' den jetzigen Stand"; befunde=$((befunde + 1)); fi
+    fi
+    if [ -z "$kern" ] && [ -z "$fehlen" ]; then meldung "check: php -m ohne Startfehler, $(grep -c . <<< "$module" || true) Module"; fi
+  fi
   local fpm andere
   fpm=$("$ZIEL/sbin/$DIENST" -t --fpm-config "$ZIEL/etc/php-fpm.conf" 2>&1 || true)
   andere=$(grep -v -e 'No pool defined' -e 'failed to post process' -e 'FPM initialization failed' -e 'Failed loading' <<< "$fpm" || true)
@@ -1172,6 +1329,9 @@ nutzung_pruefen() {
   if pools_da; then fehler "KeyHelp hat noch Pools für PHP $PHP_VER angelegt ($ZIEL/etc/php-fpm.d); eine Domain nutzt es wohl noch. $hinweis" 5; fi
   c=$(grep -rlsF -e "keyhelp-php$PHP_KURZ" -e "/opt/keyhelp/php/$PHP_VER/" /var/spool/cron/crontabs /etc/crontab /etc/cron.d 2>/dev/null | grep -vxF "$CRON" | wc -l || true)
   [ "${c:-0}" = 0 ] || fehler "$c Crontab-Datei(en) rufen PHP $PHP_VER auf (keyhelp-php$PHP_KURZ). $hinweis" 5
+  # ab 0.4.16 auch systemd-Units des Verwalters (Dienste, Timer); KeyHelps eigener FPM-Dienst zählt nicht (F-016)
+  c=$(grep -rlsF -e "keyhelp-php$PHP_KURZ" -e "/opt/keyhelp/php/$PHP_VER/" /etc/systemd/system /usr/local/lib/systemd/system 2>/dev/null | grep -vE "/$DIENST(\.service)?(\.d/[^/]*)?$" | wc -l || true)
+  [ "${c:-0}" = 0 ] || fehler "$c systemd-Unit-Datei(en) rufen PHP $PHP_VER auf. $hinweis" 5
 }
 
 entfernt_auch() {
@@ -1412,8 +1572,9 @@ uninstall_befehl() {
     bash "$ZIEL/keyhelp-setup/uninstall.sh" 9>&- || rc=$?
     [ "$rc" -eq 0 ] || meldung "Warnung: uninstall.sh endete mit $rc"
   fi
-  # was uninstall.sh liegen lässt oder bei einem Abbruch übrig bliebe
-  dienst_anhalten
+  # was uninstall.sh liegen lässt oder bei einem Abbruch übrig bliebe; läuft der Dienst danach noch, geht
+  # der Rückbau trotzdem weiter wie bis 0.4.15 (0.4.16)
+  dienst_anhalten || meldung "Warnung: $DIENST läuft nach dem Anhalten noch; der Rückbau geht weiter"
   rm -f "/etc/init.d/$DIENST" "/usr/bin/keyhelp-php$PHP_KURZ" "$PIDDATEI"
   # taub für Signale, damit dieses Löschen nicht halb endet (0.4.9); einen halben Ordner aus einem Abbruch
   # in KeyHelps uninstall.sh erkennt der nächste uninstall an RUECKBAU=begonnen (0.4.10, I-43)

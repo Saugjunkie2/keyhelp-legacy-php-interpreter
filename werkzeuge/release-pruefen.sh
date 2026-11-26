@@ -1,5 +1,7 @@
 #!/bin/bash
-# release-pruefen.sh - Version 1.0.0
+# release-pruefen.sh - Version 1.1.0
+# 1.1.0: RELEASE ganz geprüft (jedes Feld genau einmal, Originalpaket wie im Installer, Fassung von
+#        install.sh, Commit in diesem Repository; Drittprüfung vom 26.11.2026, F-019)
 # Prüft ein signiertes Release unabhängig von seinem install.sh und vergleicht es mit diesem
 # Repository. Jeder kann es ausführen; einen privaten Schlüssel braucht es nicht.
 #   1. Signatur von SHA256SUMS mit dem angegebenen öffentlichen Schlüssel (openssl direkt)
@@ -70,7 +72,29 @@ erg=$(rel ERGAENZUNG)
 [ "$erg" = "khli-php56-ergaenzung-$erg_version-debian13-amd64.tar.xz" ] || fehler "RELEASE nennt den Ergänzungssatz $erg, der Installer erwartet Version $erg_version" 3
 [ -f "$dir/$erg" ] || fehler "der Ergänzungssatz $erg fehlt" 3
 [ "$(sha256 "$dir/$erg")" = "$erg_soll" ] || fehler "der Ergänzungssatz hat nicht den SHA-256, den der Installer erwartet" 3
-meldung "RELEASE passt zum Installer $version und zum Ergänzungssatz $erg_version"
+# ab 1.1.0: jedes Feld genau einmal, alle Pflichtfelder, Originalpaket wie im Installer, Fassung von
+# install.sh, Commit in diesem Repository (Drittprüfung vom 26.11.2026, F-019)
+doppelt=$(cut -d= -f1 "$dir/RELEASE" | LC_ALL=C sort | uniq -d | tr '\n' ' ')
+[ -z "$doppelt" ] || fehler "RELEASE: diese Felder stehen mehrfach darin: $doppelt" 3
+for k in PRODUKT VERSION SYSTEM INSTALLER ERGAENZUNG ORIGINAL ORIGINAL_SHA256 INSTALL_SH_MIN INSTALL_SH_VERSION COMMIT DATUM; do
+  grep -q "^$k=" "$dir/RELEASE" || fehler "RELEASE: $k fehlt" 3
+done
+o_build=$(sed -n 's/^ORIGINAL_BUILD=\([0-9]*\)$/\1/p' "$dir/khli-php56.sh")
+o_php=$(sed -n 's/^ORIGINAL_NAME=php_\([0-9.]*\)_\$ORIGINAL_BUILD\.tar\.gz$/\1/p' "$dir/khli-php56.sh")
+o_sha=$(sed -n 's/^ORIGINAL_SHA256=\([0-9a-f]*\)$/\1/p' "$dir/khli-php56.sh")
+[ "$(rel ORIGINAL)" = "php_${o_php}_${o_build}.tar.gz" ] || fehler "RELEASE nennt das Originalpaket $(rel ORIGINAL), der Installer php_${o_php}_${o_build}.tar.gz" 3
+[ "$(rel ORIGINAL_SHA256)" = "$o_sha" ] || fehler "RELEASE nennt für das Originalpaket einen anderen SHA-256 als der Installer" 3
+i_version=$(sed -n 's/^INSTALL_SH_VERSION=\([0-9.]*\)$/\1/p' "$dir/install.sh")
+[ "$(rel INSTALL_SH_VERSION)" = "$i_version" ] || fehler "RELEASE nennt install.sh $(rel INSTALL_SH_VERSION), im Release liegt $i_version" 3
+[ "$(printf '%s\n%s\n' "$(rel INSTALL_SH_MIN)" "$i_version" | sort -V | tail -n 1)" = "$i_version" ] || fehler "RELEASE verlangt install.sh ab $(rel INSTALL_SH_MIN), im Release liegt $i_version" 3
+c=$(rel COMMIT)
+[[ "$c" =~ ^([0-9a-f]{40}|unbekannt)$ ]] || fehler "RELEASE: COMMIT ist ungültig" 3
+[[ "$(rel DATUM)" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || fehler "RELEASE: DATUM ist ungültig" 3
+if [ "$c" != unbekannt ] && command -v git > /dev/null && git -C "$wurzel" rev-parse --git-dir > /dev/null 2>&1; then
+  git -C "$wurzel" cat-file -e "$c^{commit}" 2> /dev/null || fehler "RELEASE nennt den Commit $c, den es in diesem Repository nicht gibt" 3
+  meldung "Commit $c gibt es in diesem Repository"
+fi
+meldung "RELEASE passt zum Installer $version, zum Originalpaket, zum Ergänzungssatz $erg_version und zu install.sh $i_version"
 
 bash "$dir/install.sh" --quelle "$dir" --nur-pruefen --ohne-zweiten-kanal > "$tmp/install.txt" 2>&1 \
   || { cat "$tmp/install.txt" >&2; fehler "install.sh des Releases lehnt das Release ab" 3; }

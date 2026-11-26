@@ -63,6 +63,12 @@ Bauzeiten auf einem Testserver mit 2 CPU: libvpx, tidy und c-client je wenige Mi
 | Debian 13 aktualisiert eine Systembibliothek | nichts; die privaten Bibliotheken nutzen die Systembibliotheken über ihre sonames |
 | Debian 14 | neuer Abgleich; der Reserveweg ist ein eigener Bau von PHP 5.6 |
 
+## Vorhandene Ergebnisse, Zeitstempel, Herkunft
+
+- Jede Bauanleitung schreibt ab ihrer Fassung 1.1 bis 1.3 die Datei `QUELLE` (Quelle und Fassung) in ihr Ergebnis und nimmt sie in `SHA256SUMS` auf. Ein vorhandenes Ergebnis gilt nur für genau dieselbe Quelle und Fassung; gehört es zu einer anderen oder fehlt `QUELLE`, endet der Bau mit Exit 3 und der Bitte, den Ordner zu entfernen. Bis dahin hätte ein vorhandenes Ergebnis einen Bau mit neuer Fassung still übersprungen.
+- `ergaenzung-bauen.sh` 1.2 nennt die Quelle jedes Ergebnisses und schreibt den Zeitpunkt in `BAU` nach `SOURCE_DATE_EPOCH`, wenn gesetzt. Das Archiv hat seit 1.0 feste Zeitstempel, Besitzer und Reihenfolge. Bit für Bit gleich sind zwei Bauten trotzdem nicht sicher: Compiler und Bibliotheken von Debian 13 sind nicht auf einen Snapshot festgelegt; `BAU`, `needed.tsv` und `HERKUNFT.tsv` halten fest, womit gebaut wurde.
+- Die Echtheit des Quellpakets uw-imap prüft `bash werkzeuge/sury-echtheit-pruefen.sh` über Surys Signaturkette (Schlüssel, signierte `InRelease`, `Sources.xz`) mit den Nachweisen unter `fremdquellen/sury/echtheit/`. Die Debian-Quellen prüft `apt-get source` selbst über die signierte Release-Datei.
+
 ## Hinweis zu den Bauanleitungen
 
-Die Dateien unter `build/` sind unverändert die Fassungen, mit denen der Ergänzungssatz 1.1.0 entstand. Ihre Kommentare verweisen auf die interne Projektdokumentation (Kürzel wie `E-0040` oder `docs/45`), die nicht veröffentlicht ist; „PROD" steht dort für den Debian-12-Referenzserver.
+Die Bauanleitungen unter `build/` sind die Fassungen, mit denen der Ergänzungssatz 1.1.0 entstand, ergänzt nur um die Behandlung vorhandener Ergebnisse und den Zeitstempel oben; am Bau selbst ändert das nichts. Ihre Kommentare verweisen auf die interne Projektdokumentation (Kürzel wie `E-0040` oder `docs/45`), die nicht veröffentlicht ist; „PROD" steht dort für den Debian-12-Referenzserver.

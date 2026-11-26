@@ -1,5 +1,7 @@
 #!/bin/bash
-# bau-openldap-bibliotheken.sh - Version 1.1 ENTWURF (Lauf P2, 2026-11-19)
+# bau-openldap-bibliotheken.sh - Version 1.2 (2026-11-26)
+# 1.2: ein vorhandenes Ergebnis gilt nur für genau diese Fassung (Datei QUELLE, in SHA256SUMS), sonst
+#      Exit 3 statt eines stillen Erfolgs (Drittprüfung F-010)
 # 1.1: Bauordner erkennen (ohne dh-Sequenz konfiguriert Debians Regel im Quellordner), make depend
 # Baut libldap-2.5.so.0 und liblber-2.5.so.0 aus dem Debian-12-Quellpaket openldap 2.5.13+dfsg-5
 # (derselbe Stand wie auf PROD) in der Debian-13-Chroot. Der vollständige dpkg-buildpackage scheitert
@@ -20,7 +22,12 @@ export DEB_CFLAGS_APPEND="-Wno-error=implicit-int -Wno-error=int-conversion -Wno
 quelle=openldap
 version=2.5.13+dfsg-5
 ergebnis=/khli/aus/ergebnis/openldap
-if [ -f "$ergebnis/SHA256SUMS" ]; then echo "bau-openldap-bibliotheken: $ergebnis vorhanden"; exit 0; fi
+kennung="$quelle $version"
+if [ -f "$ergebnis/SHA256SUMS" ]; then
+  if [ "$(cat "$ergebnis/QUELLE" 2>/dev/null)" = "$kennung" ]; then echo "bau-openldap-bibliotheken: $ergebnis vorhanden ($kennung)"; exit 0; fi
+  echo "bau-openldap-bibliotheken: $ergebnis gehört zu $(cat "$ergebnis/QUELLE" 2>/dev/null || echo 'einer unbekannten Quelle'), verlangt ist $kennung; den Ordner entfernen, dann neu bauen" >&2
+  exit 3
+fi
 bau=/khli/aus/bau/openldap
 rm -rf "$bau" "$ergebnis"
 mkdir -p "$bau" "$ergebnis"
@@ -48,5 +55,6 @@ cd "$bau"
 cp quellen.sha256 configure-aufruf.txt "$ergebnis/"
 cp "$verz/debian/copyright" "$ergebnis/copyright"
 cp "$verz/debian/changelog" "$ergebnis/changelog"
+printf '%s\n' "$kennung" > "$ergebnis/QUELLE"
 (cd "$ergebnis" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
 ls -la "$ergebnis/stage/usr/lib/x86_64-linux-gnu/"

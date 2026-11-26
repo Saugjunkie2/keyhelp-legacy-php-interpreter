@@ -23,7 +23,8 @@ Issues und Pull Requests sind willkommen, auf Deutsch oder Englisch.
 ### Technisches
 
 - Bash mit `set -euo pipefail`, Meldungen auf Deutsch; Dateien mit LF-Zeilenenden (`.gitattributes` erzwingt das).
-- Vor einem Pull Request: `bash tests/werkzeuge-test.sh` (unter Linux oder Git Bash; Teil B läuft nur als root unter Debian 13, etwa in einer Chroot). Wer einen Testserver mit KeyHelp hat: `bash tests/ende-zu-ende.sh --testserver <ergaenzungssatz>`.
+- Vor einem Pull Request: `bash tests/werkzeuge-test.sh` (unter Linux oder Git Bash; Teil B läuft nur als root unter Debian 13, etwa in einer Chroot). Dieselben Tests laufen bei jedem Pull Request in der öffentlichen CI (`.github/workflows/tests.yml`). Wer einen Testserver mit KeyHelp hat: `bash tests/ende-zu-ende.sh --testserver <ergaenzungssatz>`.
+- `installer/khli-php56.sh`, die Bauanleitungen unter `build/` und die Fremdquellen entwickelt Retrowork in einer internen Projektumgebung; Änderungen daran übernimmt Retrowork dorthin, und das nächste Release enthält sie. Alles andere wird direkt hier gepflegt.
 - Änderungen am Installer oder am Ergänzungssatz brauchen zusätzlich die Installations-, Rückbau- und Funktionstests aus [docs/bau.md](docs/bau.md). Sie laufen bisher in der internen Projektumgebung von Retrowork; ein Pull Request dazu wird vor dem Release dort geprüft.
 - Offiziell wird eine Änderung erst mit einem von Retrowork signierten Release.
 
@@ -52,7 +53,8 @@ Issues and pull requests are welcome, in German or English.
 ### Technical notes
 
 - Bash with `set -euo pipefail`, messages in German; files with LF line endings (enforced by `.gitattributes`).
-- Before a pull request: `bash tests/werkzeuge-test.sh` (on Linux or Git Bash; part B only runs as root on Debian 13, for example in a chroot). With a KeyHelp test server: `bash tests/ende-zu-ende.sh --testserver <supplement>`.
+- Before a pull request: `bash tests/werkzeuge-test.sh` (on Linux or Git Bash; part B only runs as root on Debian 13, for example in a chroot). The same tests run on every pull request in the public CI (`.github/workflows/tests.yml`). With a KeyHelp test server: `bash tests/ende-zu-ende.sh --testserver <supplement>`.
+- `installer/khli-php56.sh`, the build recipes in `build/` and the third-party sources are developed by Retrowork in an internal project environment; Retrowork takes changes to them over there, and the next release contains them. Everything else is maintained directly here.
 - Changes to the installer or the supplement additionally need the installation, removal and functional tests described in [docs/en/building.md](docs/en/building.md). So far they run in Retrowork's internal project environment; a pull request touching them is checked there before a release.
 - A change becomes official only with a release signed by Retrowork.
 

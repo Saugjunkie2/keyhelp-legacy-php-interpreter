@@ -20,6 +20,7 @@ This project does not redistribute any KeyHelp files. On the user's server, the 
 | UW IMAP c-client 2007f | Sury's source package for Debian 13 | Apache-2.0; Debian packaging GPL-2+ | yes, in the supplement; the source package in `fremdquellen/` |
 | libssh2 1.10.0 (as `libssh2-khli.so.1`) | Debian source package 1.10.0-3+deb12u1 | BSD-3-Clause | yes, in the supplement |
 | Debian's patches and packaging of these sources | Debian, Sury | as in the respective `copyright` files | as part of the built libraries |
+| Sury's key, signed `InRelease` and `Sources.xz` | deb.sury.org | public repository metadata without a license statement of their own | yes, unchanged in `fremdquellen/sury/echtheit/` as evidence of authenticity |
 
 The supplement contains `copyright` and `changelog.gz` per source under `lib/khli/share/doc/<source>/`, ImageMagick's `LICENSE` and `HERKUNFT.tsv` with the SHA-256 of all source files. The build recipes in `build/` and [building.md](building.md) show how it is produced.
 

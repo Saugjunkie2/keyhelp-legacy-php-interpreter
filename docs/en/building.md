@@ -63,6 +63,12 @@ Build times on a test server with 2 CPUs: libvpx, tidy and c-client a few minute
 | Debian 13 updates a system library | nothing; the private libraries use the system libraries via their sonames |
 | Debian 14 | new comparison; the fallback is an own build of PHP 5.6 |
 
+## Existing results, timestamps, origin
+
+- From their versions 1.1 to 1.3, the build recipes write a file `QUELLE` (source and version) into their result and include it in `SHA256SUMS`. An existing result only counts for exactly the same source and version; if it belongs to another one or `QUELLE` is missing, the build exits with code 3 and asks to remove the directory. Before, an existing result would have silently skipped a build of a new version.
+- `ergaenzung-bauen.sh` 1.2 names the source of every result and writes the time in `BAU` from `SOURCE_DATE_EPOCH` if set. Since 1.0 the archive has fixed timestamps, owners and order. Two builds are still not guaranteed to be bit-identical: compiler and libraries of Debian 13 are not pinned to a snapshot; `BAU`, `needed.tsv` and `HERKUNFT.tsv` record what was used.
+- `bash werkzeuge/sury-echtheit-pruefen.sh` verifies the uw-imap source package through Sury's signature chain (key, signed `InRelease`, `Sources.xz`) with the evidence in `fremdquellen/sury/echtheit/`. `apt-get source` verifies the Debian sources itself through the signed Release file.
+
 ## Note on the build recipes
 
-The files in `build/` are unchanged the versions with which supplement 1.1.0 was built. Their comments refer to the internal project documentation (abbreviations such as `E-0040` or `docs/45`), which is not published; "PROD" there stands for the Debian 12 reference server.
+The build recipes in `build/` are the versions with which supplement 1.1.0 was built, extended only by the handling of existing results and the timestamp above; the build itself is unchanged. Their comments refer to the internal project documentation (abbreviations such as `E-0040` or `docs/45`), which is not published; "PROD" there stands for the Debian 12 reference server.

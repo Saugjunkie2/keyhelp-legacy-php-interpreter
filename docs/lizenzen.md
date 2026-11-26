@@ -20,6 +20,7 @@ Dieses Projekt gibt keine Dateien von KeyHelp weiter. Der Installer lädt KeyHel
 | UW IMAP c-client 2007f | Surys Quellpaket für Debian 13 | Apache-2.0; Debians Paketierung GPL-2+ | ja, im Ergänzungssatz; das Quellpaket unter `fremdquellen/` |
 | libssh2 1.10.0 (als `libssh2-khli.so.1`) | Debian-Quellpaket 1.10.0-3+deb12u1 | BSD-3-Clause | ja, im Ergänzungssatz |
 | Debians Patches und Paketierung dieser Quellen | Debian, Sury | wie in den jeweiligen `copyright`-Dateien | als Teil der gebauten Bibliotheken |
+| Surys Schlüssel, signierte `InRelease` und `Sources.xz` | deb.sury.org | öffentliche Paketquellen-Metadaten ohne eigene Lizenzangabe | ja, unverändert unter `fremdquellen/sury/echtheit/` als Nachweis der Echtheit |
 
 Der Ergänzungssatz enthält je Quelle `copyright` und `changelog.gz` unter `lib/khli/share/doc/<quelle>/`, dazu die `LICENSE` von ImageMagick und `HERKUNFT.tsv` mit den SHA-256 aller Quelldateien. Die Bauanleitungen unter `build/` und [bau.md](bau.md) zeigen, wie er entsteht.
 

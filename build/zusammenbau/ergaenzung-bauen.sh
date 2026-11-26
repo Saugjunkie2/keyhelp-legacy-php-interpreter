@@ -1,5 +1,8 @@
 #!/bin/bash
-# ergaenzung-bauen.sh - Version 1.1 ENTWURF (Lauf P4, 2026-11-19)
+# ergaenzung-bauen.sh - Version 1.2 (2026-11-26)
+# 1.2: der Zeitpunkt in BAU folgt SOURCE_DATE_EPOCH, wenn gesetzt, damit zwei Bauten mit denselben
+#      Eingaben vergleichbar sind; ein vorhandenes Ergebnis ohne Datei QUELLE (aus den Bauanleitungen vor
+#      1.2) wird genannt (Drittprüfung F-010, F-018)
 # 1.1: libssh2 1.10.0-3+deb12u1 aus Debian 12 (build/bibliotheken/bau-debianquelle.sh) unter dem
 #      eigenen soname libssh2-khli.so.1: mit libssh2 1.11 aus Debian 13 bricht ssh2_auth_pubkey_file()
 #      bei ECDSA-Schlüsseln mit "free(): invalid pointer" ab; libcurl lädt im selben PHP-Prozess das
@@ -32,6 +35,9 @@ for q in libvpx tidy-html5 uw-imap openldap imagemagick6 imagemagick-6-common li
 done
 (cd "$E/imagemagick6" && sha256sum -c --quiet SHA256SUMS) || { echo "imagemagick6 weicht ab" >&2; exit 3; }
 for q in libvpx tidy-html5 uw-imap openldap libssh2; do (cd "$E/$q" && sha256sum -c --quiet SHA256SUMS) || { echo "$q weicht ab" >&2; exit 3; }; done
+for q in libvpx tidy-html5 uw-imap openldap imagemagick6 libssh2; do
+  if [ -f "$E/$q/QUELLE" ]; then echo "ergaenzung-bauen: $q aus $(cat "$E/$q/QUELLE")"; else echo "ergaenzung-bauen: Hinweis: $E/$q ohne QUELLE (Bauanleitung vor 1.2); die Fassung steht nur in HERKUNFT.tsv"; fi
+done
 apt-get install -y -q patchelf binutils > /dev/null
 arbeit=/khli/aus/ergaenzung/arbeit
 rm -rf "$arbeit"
@@ -107,7 +113,7 @@ if grep -q UNBEKANNT "$S/khli/soname-pakete.tsv"; then echo "nicht zuordenbar:" 
 } > "$S/khli/HERKUNFT.tsv"
 {
   echo "ergaenzung=$version"
-  echo "gebaut=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "gebaut=$(date -u -d "@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y-%m-%dT%H:%M:%SZ)"
   echo "system=Debian $(cat /etc/debian_version)"
   echo "compiler=$(gcc --version | head -1)"
 } > "$S/khli/BAU"

@@ -1,37 +1,49 @@
 #!/bin/bash
-# install.sh - Version 1.0.0
+# install.sh - Version 1.1.0
 # keyhelp-legacy-php-interpreter: PHP 5.6 für KeyHelp unter Debian 13 (amd64)
 # https://github.com/Saugjunkie2/keyhelp-legacy-php-interpreter
 # Copyright 2026 Retrowork. Lizenz: Apache License 2.0, siehe LICENSE und NOTICE.
 #
 # Installiert oder aktualisiert PHP 5.6 auf einem KeyHelp-Server mit Debian 13, als root:
 #   curl -fsSL https://github.com/Saugjunkie2/keyhelp-legacy-php-interpreter/releases/latest/download/install.sh | bash
+# Wer dieses Skript selbst prüfen will, bevor es als root läuft: docs/signatur.md, „Vor dem Start prüfen".
 # Hilfe: bash install.sh --hilfe
 #
 # Ablauf: lädt die signierte Liste SHA256SUMS des Releases und prüft ihre Ed25519-Signatur mit dem
 # unten eingetragenen öffentlichen Schlüssel, lädt jede Datei des Releases und prüft sie gegen die
-# Liste, fragt den zweiten Kanal nach Widerrufen und startet erst dann den geprüften Installer
-# khli-php56.sh. Der Installer prüft seinerseits KeyHelps Originalpaket und den Ergänzungssatz
-# gegen seine fest eingetragenen SHA-256. Ohne gültige Signatur ändert dieses Skript nichts.
+# Liste, prüft RELEASE gegen den Installer, fragt den zweiten Kanal nach der Freigabe und startet erst
+# dann den geprüften Installer khli-php56.sh. Der Installer prüft seinerseits KeyHelps Originalpaket und
+# den Ergänzungssatz gegen seine fest eingetragenen SHA-256. Ohne gültige Signatur ändert dieses Skript
+# nichts. Ein manipuliertes install.sh kann das alles weglassen; davor schützt nur die Prüfung vor dem Start.
 #
 # Den Schlüssel setzt werkzeuge/release-bauen.sh beim Bau eines Releases aus
 # schluessel/release-ed25519.pub ein. Im Repository steht hier ein leerer Platzhalter; installiert
 # wird nur mit dem install.sh aus einem Release.
+#
+# 1.1.0: Befunde der Drittprüfung vom 26.11.2026: der zweite Kanal sperrt im Zweifel (nicht erreichbar,
+#        falsch signiert, abgelaufen, ältere Generation, Release nicht gelistet: kein Start ohne
+#        --ohne-zweiten-kanal; F-002); der Server hält den Schlüssel der ersten Installation fest und
+#        lehnt ein install.sh mit anderem Schlüssel ab (--neuer-schluessel; F-001); an den Installer gehen
+#        nur --neu-aufbauen, --trotz-fremdem-ordner und --original durch (F-005); RELEASE wird ganz
+#        geprüft, auch gegen die Angaben des Installers (F-019); --aelter-erlauben gilt auch im Installer
+#        (F-004)
 set -euo pipefail
 umask 077
 export LC_ALL=C.UTF-8
 PATH=$PATH:/usr/local/sbin:/usr/sbin:/sbin
 
-INSTALL_SH_VERSION=1.0.0
+INSTALL_SH_VERSION=1.1.0
 PRODUKT=keyhelp-legacy-php-interpreter
 SYSTEM=debian13-amd64
 RELEASES=https://github.com/Saugjunkie2/keyhelp-legacy-php-interpreter/releases
 ZWEITER_KANAL=https://lizenz.retrowork.de/keyhelp-legacy-php-interpreter
-ZUSTAND_DATEI=/var/lib/khli-php56/zustand.env
+ZUSTAND_ORDNER=/var/lib/khli-php56
+ZUSTAND_DATEI=$ZUSTAND_ORDNER/zustand.env
 PROTOKOLL_ORDNER=/var/log/khli-php56
 MAX_DATEIEN=20
 MAX_BYTES=268435456
 MAX_LISTE=1048576
+RELEASE_FELDER="PRODUKT VERSION SYSTEM INSTALLER ERGAENZUNG ORIGINAL ORIGINAL_SHA256 INSTALL_SH_MIN INSTALL_SH_VERSION COMMIT DATUM"
 
 # Öffentlicher Schlüssel für die Signaturen der Releases (Ed25519)
 # BEGINN SCHLUESSEL
@@ -48,21 +60,23 @@ install.sh: PHP 5.6 für KeyHelp unter Debian 13 installieren oder aktualisieren
 
 Aufruf als root:  bash install.sh [Optionen] [-- Optionen für den Installer]
 
-  --version <v>          ein bestimmtes Release statt des neuesten, etwa 0.4.15
+  --version <v>          ein bestimmtes Release statt des neuesten, etwa 0.4.16
   --quelle <ort>         Release aus einem Ordner oder von einer https-Adresse statt von GitHub
   --nur-pruefen          nur laden und prüfen, nichts installieren (auch ohne root)
   --nur-laden <ordner>   laden, prüfen und in einen neuen Ordner legen, etwa für einen Server
                          ohne Internet (dort: bash <ordner>/install.sh --quelle <ordner>)
-  --ohne-zweiten-kanal   die Widerrufsliste auf dem zweiten Kanal nicht abfragen
+  --ohne-zweiten-kanal   die Freigabeliste nicht abfragen; Widerrufe bleiben dann ungeprüft
   --aelter-erlauben      ein älteres Release über ein neueres installieren
+  --neuer-schluessel     einen anderen Release-Schlüssel annehmen als bei der ersten Installation
+                         (nur nach einem angekündigten Schlüsselwechsel, docs/signatur.md)
   --hilfe                diese Hilfe
 
 Ohne Optionen: install, wenn PHP 5.6 von diesem Projekt noch nicht eingerichtet ist, sonst update.
-Optionen nach -- gehen an den Installer, etwa -- --neu-aufbauen oder -- --original <datei>.
-Danach: khli-php56 check, khli-php56 status, khli-php56 uninstall.
+Nach -- sind nur diese Optionen für den Installer erlaubt: --neu-aufbauen, --trotz-fremdem-ordner,
+--original <datei>. Danach: khli-php56 check, khli-php56 status, khli-php56 uninstall.
 
 Exit: 0 Erfolg, 1 Fehler (etwa ein Download), 2 falscher Aufruf, 3 Signatur oder Prüfsumme falsch,
-4 Voraussetzung fehlt, 5 zum Schutz abgelehnt (Release widerrufen oder älter als installiert);
+4 Voraussetzung fehlt, 5 zum Schutz abgelehnt (Freigabe fehlt oder widerrufen, älteres Release);
 nach dem Start des Installers dessen Exit-Code.
 TEXT
 }
@@ -98,13 +112,15 @@ holen() {
   [ -f "$ziel" ] && [ "$(stat -c %s -- "$ziel")" -le "$max" ]
 }
 
+fingerabdruck_von() { openssl pkey -pubin -in "$1" -outform DER 2> /dev/null | sha256sum | cut -c1-64; }
+
 schluessel_vorbereiten() {
   local text
   [ -n "$SCHLUESSEL_PEM" ] || fehler "dieses install.sh enthält keinen öffentlichen Schlüssel (Stand aus dem Repository); bitte das install.sh aus einem Release verwenden: $RELEASES" 4
   printf '%s\n' "$SCHLUESSEL_PEM" > "$tmp/schluessel.pem"
   text=$(openssl pkey -pubin -in "$tmp/schluessel.pem" -noout -text 2> /dev/null) || fehler "der eingetragene öffentliche Schlüssel ist nicht lesbar" 3
   [[ "$text" == "ED25519 Public-Key:"* ]] || fehler "der eingetragene öffentliche Schlüssel ist kein Ed25519-Schlüssel" 3
-  FINGERABDRUCK=$(openssl pkey -pubin -in "$tmp/schluessel.pem" -outform DER 2> /dev/null | sha256sum | cut -c1-64)
+  FINGERABDRUCK=$(fingerabdruck_von "$tmp/schluessel.pem")
 }
 
 signatur_gueltig() {
@@ -142,28 +158,43 @@ datei_holen_und_pruefen() {
 }
 
 rel_wert() { sed -n "s/^$1=//p" "$tmp/dateien/RELEASE"; }
+inst_wert() { sed -n "s/^$1=\\(.*\\)\$/\\1/p" "$tmp/dateien/$R_INSTALLER" | head -c 200; }
 
 release_lesen() {
-  local zeile n=0 muster='^[A-Z][A-Z0-9_]{0,31}=[A-Za-z0-9._:+-]{0,128}$' k
+  # ab 1.1.0 sind alle Felder Pflicht, jedes genau einmal, mit festem Format (F-019)
+  local zeile n=0 muster='^[A-Z][A-Z0-9_]{0,31}=[A-Za-z0-9._:+-]{0,128}$' k doppelt
   while IFS= read -r zeile || [ -n "$zeile" ]; do
     n=$((n + 1))
     [[ $zeile =~ $muster ]] || fehler "RELEASE: Zeile $n ist ungültig" 3
   done < "$tmp/dateien/RELEASE"
-  for k in PRODUKT VERSION SYSTEM INSTALLER ERGAENZUNG; do
-    [ "$(grep -c "^$k=" "$tmp/dateien/RELEASE")" = 1 ] || fehler "RELEASE: $k fehlt oder steht mehrfach darin" 3
+  doppelt=$(cut -d= -f1 "$tmp/dateien/RELEASE" | LC_ALL=C sort | uniq -d | tr '\n' ' ')
+  [ -z "$doppelt" ] || fehler "RELEASE: diese Felder stehen mehrfach darin: $doppelt" 3
+  for k in $RELEASE_FELDER; do
+    grep -q "^$k=" "$tmp/dateien/RELEASE" || fehler "RELEASE: $k fehlt" 3
   done
   R_PRODUKT=$(rel_wert PRODUKT)
   R_VERSION=$(rel_wert VERSION)
   R_SYSTEM=$(rel_wert SYSTEM)
   R_INSTALLER=$(rel_wert INSTALLER)
   R_ERGAENZUNG=$(rel_wert ERGAENZUNG)
+  R_ORIGINAL=$(rel_wert ORIGINAL)
+  R_ORIGINAL_SHA=$(rel_wert ORIGINAL_SHA256)
   R_MIN=$(rel_wert INSTALL_SH_MIN)
+  R_INST_SH=$(rel_wert INSTALL_SH_VERSION)
+  R_COMMIT=$(rel_wert COMMIT)
+  R_DATUM=$(rel_wert DATUM)
   [ "$R_PRODUKT" = "$PRODUKT" ] || fehler "RELEASE: Produkt $R_PRODUKT, erwartet $PRODUKT" 3
   [ "$R_SYSTEM" = "$SYSTEM" ] || fehler "RELEASE: System $R_SYSTEM, erwartet $SYSTEM" 3
   [[ "$R_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fehler "RELEASE: Version $R_VERSION ist ungültig" 3
   [[ "$R_INSTALLER" =~ ^[A-Za-z0-9._+-]+\.sh$ ]] || fehler "RELEASE: Installer $R_INSTALLER ist ungültig" 3
   [[ "$R_ERGAENZUNG" =~ ^khli-php56-ergaenzung-[0-9]+\.[0-9]+\.[0-9]+-debian13-amd64\.tar\.xz$ ]] || fehler "RELEASE: Ergänzungssatz $R_ERGAENZUNG ist ungültig" 3
-  if [ -n "$R_MIN" ] && [ "$(printf '%s\n%s\n' "$R_MIN" "$INSTALL_SH_VERSION" | sort -V | tail -n 1)" != "$INSTALL_SH_VERSION" ]; then
+  [[ "$R_ORIGINAL" =~ ^php_[0-9]+\.[0-9]+\.[0-9]+_[0-9]+\.tar\.gz$ ]] || fehler "RELEASE: Originalpaket $R_ORIGINAL ist ungültig" 3
+  [[ "$R_ORIGINAL_SHA" =~ ^[0-9a-f]{64}$ ]] || fehler "RELEASE: ORIGINAL_SHA256 ist ungültig" 3
+  [[ "$R_MIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fehler "RELEASE: INSTALL_SH_MIN ist ungültig" 3
+  [[ "$R_INST_SH" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fehler "RELEASE: INSTALL_SH_VERSION ist ungültig" 3
+  [[ "$R_COMMIT" =~ ^([0-9a-f]{40}|unbekannt)$ ]] || fehler "RELEASE: COMMIT ist ungültig" 3
+  [[ "$R_DATUM" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || fehler "RELEASE: DATUM ist ungültig" 3
+  if [ "$(printf '%s\n%s\n' "$R_MIN" "$INSTALL_SH_VERSION" | sort -V | tail -n 1)" != "$INSTALL_SH_VERSION" ]; then
     fehler "das Release braucht install.sh ab $R_MIN, dieses ist $INSTALL_SH_VERSION; bitte das install.sh aus dem Release verwenden" 4
   fi
   if [ -n "$VERSION_WUNSCH" ] && [ "$R_VERSION" != "$VERSION_WUNSCH" ]; then
@@ -173,32 +204,85 @@ release_lesen() {
   gelistet "$R_ERGAENZUNG" || fehler "SHA256SUMS: der Ergänzungssatz $R_ERGAENZUNG fehlt" 3
 }
 
+installer_abgleichen() {
+  # RELEASE muss zu den fest eingetragenen Angaben des Installers passen (ab 1.1.0, F-019)
+  local iv ib io isha iev iesha
+  iv=$(inst_wert KHLI_VERSION)
+  [ "$iv" = "$R_VERSION" ] || fehler "der Installer im Release hat die Version ${iv:-unbekannt}, das Release nennt $R_VERSION" 3
+  ib=$(inst_wert ORIGINAL_BUILD)
+  io=$(sed -n 's/^ORIGINAL_NAME=php_\([0-9.]*\)_\$ORIGINAL_BUILD\.tar\.gz$/\1/p' "$tmp/dateien/$R_INSTALLER")
+  isha=$(inst_wert ORIGINAL_SHA256)
+  [ "$R_ORIGINAL" = "php_${io}_${ib}.tar.gz" ] || fehler "RELEASE nennt das Originalpaket $R_ORIGINAL, der Installer php_${io}_${ib}.tar.gz" 3
+  [ "$R_ORIGINAL_SHA" = "$isha" ] || fehler "RELEASE nennt für das Originalpaket einen anderen SHA-256 als der Installer" 3
+  iev=$(inst_wert ERGAENZUNG_VERSION)
+  iesha=$(inst_wert ERGAENZUNG_SHA256)
+  [ "$R_ERGAENZUNG" = "khli-php56-ergaenzung-$iev-debian13-amd64.tar.xz" ] || fehler "RELEASE nennt den Ergänzungssatz $R_ERGAENZUNG, der Installer erwartet Version ${iev:-unbekannt}" 3
+  [ "$(summe_von "$R_ERGAENZUNG")" = "$iesha" ] || fehler "der Ergänzungssatz im Release hat nicht den SHA-256, den der Installer erwartet" 3
+}
+
 zweiter_kanal() {
-  local d=$tmp/kanal zeile status grund
-  if [ "$OHNE_KANAL" = 1 ]; then meldung "zweiter Kanal nicht abgefragt (--ohne-zweiten-kanal)"; return 0; fi
+  # ab 1.1.0 sperrt der zweite Kanal im Zweifel: ohne gültige, nicht abgelaufene Freigabeliste mindestens
+  # der Generation, die dieser Server schon kannte, und ohne Eintrag "gueltig" startet nichts (F-002)
+  local d=$tmp/kanal zeile status grund bis heute alt
+  if [ "$OHNE_KANAL" = 1 ]; then
+    warnung "zweiter Kanal nicht abgefragt (--ohne-zweiten-kanal): ob das Release freigegeben oder widerrufen ist, bleibt ungeprüft"
+    return 0
+  fi
   mkdir -p "$d"
   if ! holen "$ZWEITER_KANAL" freigaben.txt "$d/freigaben.txt" "$MAX_LISTE" leise \
      || ! holen "$ZWEITER_KANAL" freigaben.txt.sig "$d/freigaben.txt.sig" 64 leise; then
-    warnung "zweiter Kanal $ZWEITER_KANAL nicht erreichbar; ob das Release widerrufen ist, bleibt ungeprüft"
-    return 0
+    fehler "zweiter Kanal $ZWEITER_KANAL nicht erreichbar; nichts geändert. Ohne Prüfung der Freigabe nur mit --ohne-zweiten-kanal" 5
   fi
-  if ! signatur_gueltig "$d/freigaben.txt" "$d/freigaben.txt.sig"; then
-    warnung "die Freigabeliste auf dem zweiten Kanal hat keine gültige Signatur; ob das Release widerrufen ist, bleibt ungeprüft"
-    return 0
+  signatur_gueltig "$d/freigaben.txt" "$d/freigaben.txt.sig" \
+    || fehler "die Freigabeliste auf dem zweiten Kanal hat keine gültige Signatur (Schlüssel SHA256:$FINGERABDRUCK); nichts geändert. Wird die Liste gerade erneuert, später noch einmal versuchen" 3
+  FREIGABE_GENERATION=$(awk '/^# generation [0-9]+$/ {print $3; exit}' "$d/freigaben.txt")
+  bis=$(awk '/^# gueltig-bis [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/ {print $3; exit}' "$d/freigaben.txt")
+  [ -n "$FREIGABE_GENERATION" ] && [ -n "$bis" ] || fehler "die Freigabeliste nennt keine Generation oder kein Ablaufdatum" 3
+  heute=$(date -u +%Y-%m-%d)
+  if [[ "$heute" > "$bis" ]]; then
+    fehler "die Freigabeliste ist seit $bis abgelaufen; nichts geändert. Retrowork erneuert sie; bis dahin nur mit --ohne-zweiten-kanal" 5
   fi
+  alt=$(cat "$ZUSTAND_ORDNER/freigaben-generation" 2> /dev/null || echo 0)
+  [[ "$alt" =~ ^[0-9]+$ ]] || alt=0
+  [ "$FREIGABE_GENERATION" -ge "$alt" ] || fehler "die Freigabeliste hat die Generation $FREIGABE_GENERATION, dieser Server kannte schon die Generation $alt; eine ältere Liste wird nicht angenommen" 5
   zeile=$(awk -v s="$SUMMEN_SHA" '$0 !~ /^#/ && $2 == s {print; exit}' "$d/freigaben.txt")
-  if [ -z "$zeile" ]; then
-    warnung "Release $R_VERSION steht nicht in der Freigabeliste des zweiten Kanals"
-    return 0
-  fi
+  [ -n "$zeile" ] || fehler "Release $R_VERSION steht nicht in der Freigabeliste des zweiten Kanals (Generation $FREIGABE_GENERATION); nichts geändert" 5
   status=$(awk '{print $3}' <<< "$zeile")
   case "$status" in
-    gueltig) meldung "zweiter Kanal: Release $R_VERSION ist als gültig geführt" ;;
+    gueltig) meldung "zweiter Kanal: Release $R_VERSION ist als gültig geführt (Freigabeliste Generation $FREIGABE_GENERATION, gültig bis $bis)" ;;
     widerrufen)
       grund=$(awk '{$1 = $2 = $3 = $4 = ""; sub(/^ +/, ""); print}' <<< "$zeile" | LC_ALL=C tr -cd ' -~')
       fehler "Release $R_VERSION ist widerrufen: ${grund:-ohne Angabe}; bitte ein anderes Release wählen" 5 ;;
-    *) warnung "zweiter Kanal: unbekannter Status $status für Release $R_VERSION" ;;
+    *) fehler "zweiter Kanal: unbekannter Status $status für Release $R_VERSION; nichts geändert" 5 ;;
   esac
+}
+
+schluessel_abgleichen() {
+  # ab 1.1.0 hält der Server den Schlüssel seiner ersten Installation fest; ein install.sh mit anderem
+  # Schlüssel startet den Installer nur mit --neuer-schluessel (F-001). Gegen ein manipuliertes install.sh
+  # hilft das nicht, gegen eine Verwechslung schon, und die geplanten automatischen Updates prüfen dagegen
+  local pin=$ZUSTAND_ORDNER/release-ed25519.pub pin_fp
+  [ -f "$pin" ] || return 0
+  pin_fp=$(fingerabdruck_von "$pin")
+  [ "$pin_fp" != "$FINGERABDRUCK" ] || return 0
+  [ "$NEUER_SCHLUESSEL" = 1 ] || fehler "dieser Server vertraut dem Release-Schlüssel SHA256:$pin_fp, dieses install.sh dem Schlüssel SHA256:$FINGERABDRUCK; nichts geändert. Nur nach einem angekündigten Schlüsselwechsel (docs/signatur.md): --neuer-schluessel" 3
+  warnung "der Schlüssel SHA256:$FINGERABDRUCK ersetzt nach der Installation SHA256:$pin_fp (--neuer-schluessel)"
+}
+
+festhalten() {
+  # nach einem erfolgreichen Lauf: Schlüssel und Generation der Freigabeliste im Zustand des Installers
+  [ -d "$ZUSTAND_ORDNER" ] || return 0
+  if [ ! -f "$ZUSTAND_ORDNER/release-ed25519.pub" ] || [ "$NEUER_SCHLUESSEL" = 1 ]; then
+    cp -- "$tmp/schluessel.pem" "$ZUSTAND_ORDNER/release-ed25519.pub" 2> /dev/null || warnung "Schlüssel nicht festgehalten"
+  fi
+  if [ -n "${FREIGABE_GENERATION:-}" ]; then
+    local alt
+    alt=$(cat "$ZUSTAND_ORDNER/freigaben-generation" 2> /dev/null || echo 0)
+    [[ "$alt" =~ ^[0-9]+$ ]] || alt=0
+    if [ "$FREIGABE_GENERATION" -gt "$alt" ]; then
+      printf '%s\n' "$FREIGABE_GENERATION" > "$ZUSTAND_ORDNER/freigaben-generation" 2> /dev/null || warnung "Generation der Freigabeliste nicht festgehalten"
+    fi
+  fi
 }
 
 platz_pruefen() {
@@ -213,13 +297,29 @@ platz_pruefen() {
 protokollieren() {
   # eine Zeile je Lauf mit Installation, nur für root lesbar
   mkdir -p "$PROTOKOLL_ORDNER" 2> /dev/null && chmod 750 "$PROTOKOLL_ORDNER" 2> /dev/null || return 0
-  printf '%s install.sh %s: Release %s, SHA256SUMS %s, Schlüssel SHA256:%s, Quelle %s, %s, Exit %s\n' \
+  printf '%s install.sh %s: Release %s, SHA256SUMS %s, Schlüssel SHA256:%s, Quelle %s, Freigabeliste %s, %s, Exit %s\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$INSTALL_SH_VERSION" "$R_VERSION" "$SUMMEN_SHA" "$FINGERABDRUCK" \
-    "$BASIS" "$1" "$2" >> "$PROTOKOLL_ORDNER/install-sh.log" 2> /dev/null || true
+    "$BASIS" "${FREIGABE_GENERATION:+Generation $FREIGABE_GENERATION}${FREIGABE_GENERATION:-nicht abgefragt}" "$1" "$2" \
+    >> "$PROTOKOLL_ORDNER/install-sh.log" 2> /dev/null || true
+}
+
+durchreichen_pruefen() {
+  # ab 1.1.0 nur ausdrücklich erlaubte Optionen für den Installer: ein anderer Ergänzungssatz hätte die
+  # Bindung an das signierte Release aufgehoben (F-005)
+  local i=0
+  while [ "$i" -lt "${#DURCH[@]}" ]; do
+    case "${DURCH[$i]}" in
+      --neu-aufbauen|--trotz-fremdem-ordner) ;;
+      --original) [ $((i + 1)) -lt "${#DURCH[@]}" ] || fehler "--original braucht eine Datei" 2; i=$((i + 1)) ;;
+      *) fehler "Option für den Installer nicht erlaubt: ${DURCH[$i]} (erlaubt: --neu-aufbauen, --trotz-fremdem-ordner, --original <datei>)" 2 ;;
+    esac
+    i=$((i + 1))
+  done
 }
 
 main() {
-  VERSION_WUNSCH="" QUELLE="" NUR_PRUEFEN=0 NUR_LADEN="" OHNE_KANAL=0 AELTER=0
+  VERSION_WUNSCH="" QUELLE="" NUR_PRUEFEN=0 NUR_LADEN="" OHNE_KANAL=0 AELTER=0 NEUER_SCHLUESSEL=0
+  FREIGABE_GENERATION=""
   DURCH=()
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -229,14 +329,16 @@ main() {
       --nur-laden) [ $# -ge 2 ] || fehler "--nur-laden braucht einen Ordner" 2; NUR_LADEN=$2; shift 2 ;;
       --ohne-zweiten-kanal) OHNE_KANAL=1; shift ;;
       --aelter-erlauben) AELTER=1; shift ;;
+      --neuer-schluessel) NEUER_SCHLUESSEL=1; shift ;;
       --hilfe|--help|-h) hilfe; exit 0 ;;
       --) shift; DURCH=("$@"); break ;;
       *) fehler "unbekannte Option: $1 (Hilfe: bash install.sh --hilfe)" 2 ;;
     esac
   done
   if [ -n "$VERSION_WUNSCH" ] && [[ ! "$VERSION_WUNSCH" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    fehler "--version erwartet eine Versionsnummer wie 0.4.15" 2
+    fehler "--version erwartet eine Versionsnummer wie 0.4.16" 2
   fi
+  durchreichen_pruefen
   if [ -n "$QUELLE" ]; then
     case "$QUELLE" in
       https://*) BASIS=${QUELLE%/} ;;
@@ -260,7 +362,7 @@ main() {
     [ "$(cut -d. -f1 /etc/debian_version 2> /dev/null || true)" = 13 ] || fehler "nur Debian 13 (gefunden: $(cat /etc/debian_version 2> /dev/null || echo unbekannt))" 4
   fi
   local w
-  for w in openssl sha256sum awk sed stat mktemp sort; do
+  for w in openssl sha256sum awk sed stat mktemp sort uniq cut; do
     command -v "$w" > /dev/null || fehler "$w fehlt (unter Debian: apt-get install openssl coreutils)" 4
   done
   if [[ "$BASIS" == https://* ]] && ! command -v curl > /dev/null && ! command -v wget > /dev/null; then
@@ -271,7 +373,7 @@ main() {
   trap 'rm -rf -- "$tmp"' EXIT
   mkdir "$tmp/dateien"
   schluessel_vorbereiten
-  meldung "Version $INSTALL_SH_VERSION, Quelle $BASIS"
+  meldung "Version $INSTALL_SH_VERSION, Quelle $BASIS, Schlüssel SHA256:$FINGERABDRUCK"
 
   holen "$BASIS" SHA256SUMS "$tmp/SHA256SUMS" "$MAX_LISTE" || fehler "Download gescheitert: $BASIS/SHA256SUMS (gibt es das Release?)" 1
   holen "$BASIS" SHA256SUMS.sig "$tmp/SHA256SUMS.sig" 64 || fehler "SHA256SUMS.sig fehlt oder ist nicht ladbar ($BASIS); ohne gültige Signatur wird nichts installiert" 3
@@ -287,10 +389,8 @@ main() {
   while IFS= read -r name <&3; do
     [ "$name" = RELEASE ] || datei_holen_und_pruefen "$name"
   done 3< "$tmp/namen"
-  local iv
-  iv=$(awk -F= '/^KHLI_VERSION=[0-9.]+$/ {print $2; exit}' "$tmp/dateien/$R_INSTALLER")
-  [ "$iv" = "$R_VERSION" ] || fehler "der Installer im Release hat die Version ${iv:-unbekannt}, das Release nennt $R_VERSION" 3
-  meldung "Release $R_VERSION geprüft: Signatur gültig (Schlüssel SHA256:$FINGERABDRUCK), $(wc -l < "$tmp/namen") Dateien, SHA256SUMS $SUMMEN_SHA"
+  installer_abgleichen
+  meldung "Release $R_VERSION geprüft: Signatur gültig, $(wc -l < "$tmp/namen") Dateien, SHA256SUMS $SUMMEN_SHA, gebaut aus $R_COMMIT am $R_DATUM"
   zweiter_kanal
 
   if [ "$NUR_PRUEFEN" = 1 ] && [ -z "$NUR_LADEN" ]; then meldung "nur geprüft, nichts installiert"; return 0; fi
@@ -302,7 +402,9 @@ main() {
     return 0
   fi
 
+  schluessel_abgleichen
   local befehl=install installiert=""
+  local extra=()
   if [ -f "$ZUSTAND_DATEI" ]; then
     befehl=update
     installiert=$(sed -n 's/^KHLI_VERSION=//p' "$ZUSTAND_DATEI" | tail -n 1)
@@ -310,6 +412,8 @@ main() {
       [ "$AELTER" = 1 ] || fehler "installiert ist $installiert, das Release $R_VERSION ist älter; mit --aelter-erlauben trotzdem" 5
       warnung "installiert ist $installiert, eingespielt wird das ältere Release $R_VERSION (--aelter-erlauben)"
     fi
+    # der Installer prüft das ab 0.4.16 selbst noch einmal unter seiner Sperre (F-004)
+    if [ "$AELTER" = 1 ] && grep -q -- '--aelter-erlauben)' "$tmp/dateien/$R_INSTALLER"; then extra=(--aelter-erlauben); fi
     platz_pruefen /opt/keyhelp/php 700
   else
     platz_pruefen /opt/keyhelp/php 400
@@ -324,10 +428,11 @@ main() {
   trap 'signal=INT' INT
   trap 'signal=TERM' TERM
   set +e
-  bash "$tmp/dateien/$R_INSTALLER" "$befehl" --ergaenzung "$tmp/dateien/$R_ERGAENZUNG" ${DURCH[@]+"${DURCH[@]}"} < /dev/null
+  bash "$tmp/dateien/$R_INSTALLER" "$befehl" --ergaenzung "$tmp/dateien/$R_ERGAENZUNG" ${extra[@]+"${extra[@]}"} ${DURCH[@]+"${DURCH[@]}"} < /dev/null
   rc=$?
   set -e
   if [ -n "$signal" ]; then warnung "Signal $signal erhalten, der Installer hat seinen Lauf beendet"; fi
+  if [ "$rc" -eq 0 ]; then festhalten; fi
   protokollieren "$befehl" "$rc"
   if [ "$rc" -eq 0 ]; then meldung "fertig: Release $R_VERSION, $befehl ohne Fehler; Prüfung jederzeit mit: khli-php56 check"; fi
   return "$rc"

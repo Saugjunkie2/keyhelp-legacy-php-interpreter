@@ -1,5 +1,7 @@
 #!/bin/bash
-# bau-imagemagick6.sh - Version 1.2 ENTWURF (Lauf P2, 2026-11-19)
+# bau-imagemagick6.sh - Version 1.3 (2026-11-26)
+# 1.3: ein vorhandenes Ergebnis gilt nur für genau diese Fassung (Datei QUELLE, in SHA256SUMS), sonst
+#      Exit 3 statt eines stillen Erfolgs (Drittprüfung F-010)
 # 1.2: auch implicit-function-declaration nur als Warnung. Debian 13s dpkg-buildflags setzt
 #      -Werror=implicit-function-declaration von sich aus, Debian 12 nicht. Debians coders/mat.c ruft
 #      GetMagickUTCTime statt GetMagickUTCtime auf; Debian 12s mat.so enthält das unaufgelöste Symbol
@@ -29,7 +31,12 @@ im_stand=60
 version="8:${im_basis}.${im_stand}+dfsg-1.6+deb12u15"
 praefix=/opt/keyhelp/php/5.6/lib/khli
 ergebnis=/khli/aus/ergebnis/imagemagick6
-if [ -f "$ergebnis/SHA256SUMS" ]; then echo "bau-imagemagick6: $ergebnis vorhanden"; exit 0; fi
+kennung="$quelle $version"
+if [ -f "$ergebnis/SHA256SUMS" ]; then
+  if [ "$(cat "$ergebnis/QUELLE" 2>/dev/null)" = "$kennung" ]; then echo "bau-imagemagick6: $ergebnis vorhanden ($kennung)"; exit 0; fi
+  echo "bau-imagemagick6: $ergebnis gehört zu $(cat "$ergebnis/QUELLE" 2>/dev/null || echo 'einer unbekannten Quelle'), verlangt ist $kennung; den Ordner entfernen, dann neu bauen" >&2
+  exit 3
+fi
 bau=/khli/aus/bau/imagemagick6
 rm -rf "$bau"
 mkdir -p "$bau" "$ergebnis"
@@ -77,6 +84,7 @@ cp "$verz/debian/copyright" "$ergebnis/copyright"
 cp "$verz/debian/changelog" "$ergebnis/changelog"
 cp "$verz/LICENSE" "$ergebnis/LICENSE"
 LD_LIBRARY_PATH="$ergebnis/stage$praefix/lib" "$ergebnis/stage$praefix/bin/convert" -version > "$ergebnis/convert-version.txt" 2>&1 || true
+printf '%s\n' "$kennung" > "$ergebnis/QUELLE"
 (cd "$ergebnis" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
 cat "$ergebnis/convert-version.txt"
 du -sh "$ergebnis/stage"

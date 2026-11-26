@@ -1,5 +1,8 @@
 #!/bin/bash
-# bau-debianquelle.sh - Version 1.1 ENTWURF (Lauf P2, 2026-11-19)
+# bau-debianquelle.sh - Version 1.3 (2026-11-26)
+# 1.3: Kopfzeile zum Exit-Code berichtigt (vorhandenes Ergebnis: Exit 0 nur bei gleicher QUELLE, sonst 3)
+# 1.2: ein vorhandenes Ergebnis gilt nur für genau dieselbe Quelle und Fassung (Datei QUELLE, in
+#      SHA256SUMS); sonst endet der Bau mit Exit 3 statt mit einem stillen Erfolg (Drittprüfung F-010)
 # 1.1: Schalter --gcc12-semantik. GCC 14 (Debian 13) behandelt implicit-int, int-conversion,
 #      incompatible-pointer-types und return-mismatch als Fehler, GCC 12 (Debian 12) als Warnung.
 #      Mit dem Schalter übersetzt der Bau den unveränderten Debian-12-Quelltext wie unter Debian 12
@@ -13,7 +16,8 @@
 # apt prüft die Signatur der Release-Datei und die Prüfsummen der Quelldateien.
 # Ergebnis: /khli/aus/bau/<quellpaket>/ mit Quellen, Bauprotokoll und .deb-Dateien,
 #           /khli/aus/ergebnis/<quellpaket>/ mit .deb, .buildinfo, .changes und SHA256SUMS.
-# Exit 0 bei Erfolg; ein vorhandenes Ergebnis wird nicht neu gebaut (Exit 0 mit Hinweis).
+# Exit 0 bei Erfolg; ein vorhandenes Ergebnis derselben Quelle und Fassung wird nicht neu gebaut (Exit 0
+# mit Hinweis), eines anderen oder ohne QUELLE: Exit 3; 1 Baufehler oder fehlendes Argument, 2 ungültiges Argument.
 set -euo pipefail
 exec </dev/null
 quelle=${1:?Quellpaket}
@@ -27,8 +31,11 @@ if [ "${3:-}" = "--gcc12-semantik" ]; then
   echo "bau-debianquelle: GCC-12-Semantik, DEB_CFLAGS_APPEND=$DEB_CFLAGS_APPEND"
 fi
 ergebnis=/khli/aus/ergebnis/$quelle
+kennung="$quelle $version"
 if [ -f "$ergebnis/SHA256SUMS" ]; then
-  echo "bau-debianquelle: $ergebnis vorhanden, nichts zu tun"; exit 0
+  if [ "$(cat "$ergebnis/QUELLE" 2>/dev/null)" = "$kennung" ]; then echo "bau-debianquelle: $ergebnis vorhanden ($kennung), nichts zu tun"; exit 0; fi
+  echo "bau-debianquelle: $ergebnis gehört zu $(cat "$ergebnis/QUELLE" 2>/dev/null || echo 'einer unbekannten Quelle'), verlangt ist $kennung; den Ordner entfernen, dann neu bauen" >&2
+  exit 3
 fi
 bau=/khli/aus/bau/$quelle
 rm -rf "$bau"
@@ -52,5 +59,6 @@ cd "$bau"
 cp ./*.deb ./*.buildinfo ./*.changes quellen.sha256 "$ergebnis/"
 cp "$verz/debian/copyright" "$ergebnis/copyright"
 cp "$verz/debian/changelog" "$ergebnis/changelog"
-(cd "$ergebnis" && sha256sum ./*.deb ./*.buildinfo ./*.changes quellen.sha256 copyright changelog > SHA256SUMS)
+printf '%s\n' "$kennung" > "$ergebnis/QUELLE"
+(cd "$ergebnis" && sha256sum ./*.deb ./*.buildinfo ./*.changes quellen.sha256 copyright changelog QUELLE > SHA256SUMS)
 ls -la "$ergebnis"

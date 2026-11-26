@@ -1,5 +1,7 @@
 #!/bin/bash
-# release-bauen.sh - Version 1.0.0
+# release-bauen.sh - Version 1.1.0
+# 1.1.0: Releases verlangen install.sh ab 1.1.0 (INSTALL_SH_MIN), das den zweiten Kanal im Zweifel sperrt
+#        (Drittprüfung vom 26.11.2026, F-002)
 # Stellt ein Release ohne Signatur zusammen: install.sh mit eingesetztem öffentlichem Schlüssel,
 # installer/khli-php56.sh, den Ergänzungssatz, RELEASE und SHA256SUMS. Danach signiert der
 # Betreiber mit werkzeuge/release-signieren.sh, geprüft wird mit werkzeuge/release-pruefen.sh.
@@ -17,7 +19,7 @@ hier=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 wurzel=$(cd "$hier/.." && pwd)
 # shellcheck source=werkzeuge/gemeinsam.sh
 . "$hier/gemeinsam.sh"
-INSTALL_SH_MIN=1.0.0
+INSTALL_SH_MIN=1.1.0
 
 schluessel=$wurzel/schluessel/release-ed25519.pub
 ohne_git=0

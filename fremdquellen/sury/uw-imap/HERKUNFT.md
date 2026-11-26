@@ -12,6 +12,8 @@ Quelle für den Bau von c-client (`libc-client.so.2007e`) im Ergänzungssatz, ü
 
 Aus der Paketquelle deb.sury.org von Ondřej Surý für Debian 13, geladen am 18.11.2026 vom Spiegel `https://ftp.mpi-inf.mpg.de/pub/linux/mirror/deb.sury.org/repositories/php/pool/main/u/uw-imap/`. Surys `.dsc`-Dateien sind nicht signiert; die Echtheit wurde stattdessen über Surys Signaturkette geprüft: Schlüssel mit dem Fingerabdruck `15058500A0235D97F5D10063B188E2B695BD4743`, signierte `InRelease` vom 13.11.2026, daraus der Index `Sources` und daraus die Prüfsummen dieser Dateien. `uw-imap_2007f~dfsg.orig.tar.gz` ist byte-gleich mit Debians eigener Datei.
 
+Die Glieder dieser Kette liegen unter [`../echtheit/`](../echtheit/HERKUNFT.md); nachprüfen lässt sich alles mit `bash werkzeuge/sury-echtheit-pruefen.sh`.
+
 Gegenüber Debians 2007f~dfsg-7, dessen Bibliothek unter Debian 12 läuft, enthält -7.1 nur Baukorrekturen (GCC 14, Abbruch bei Baufehlern, chown-Syntax; siehe `debian/changelog` im Paket).
 
 ## Lizenz

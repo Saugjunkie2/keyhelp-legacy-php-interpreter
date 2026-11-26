@@ -1,0 +1,49 @@
+# Öffentliche Tests (Drittprüfung vom 26.11.2026, F-021). Die Tests des Installers auf einem Server mit
+# KeyHelp laufen weiter auf einem Testserver von Retrowork (tests/ende-zu-ende.sh, docs/bau.md).
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # täglich: das veröffentlichte Release und die Laufzeit der Freigabeliste
+    - cron: "17 6 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  werkzeuge-ubuntu:
+    name: install.sh und Werkzeuge (Teil A, ohne root)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash tests/werkzeuge-test.sh
+
+  werkzeuge-debian13:
+    name: install.sh und Werkzeuge als root unter Debian 13 (Teil A und B)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    container: debian:trixie
+    steps:
+      - run: apt-get update -q && apt-get install -y -q --no-install-recommends openssl ca-certificates git
+      - uses: actions/checkout@v4
+      - run: bash tests/werkzeuge-test.sh
+
+  herkunft:
+    name: Herkunft des Quellpakets uw-imap
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash werkzeuge/sury-echtheit-pruefen.sh
+
+  veroeffentlichung:
+    name: Veröffentlichtes Release und zweiter Kanal
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash tests/veroeffentlichung-pruefen.sh

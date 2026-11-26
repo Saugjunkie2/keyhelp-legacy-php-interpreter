@@ -1,11 +1,15 @@
 #!/bin/bash
-# ende-zu-ende.sh - Version 1.0.1
+# ende-zu-ende.sh - Version 1.1.0
+# 1.1.0: für install.sh 1.1.0 (Drittprüfung vom 26.11.2026, F-020): der festgehaltene Schlüssel und die
+#        Generation der Freigabeliste des Servers werden vorher gesichert und am Ende wiederhergestellt,
+#        damit der Wegwerf-Schlüssel nicht auf dem Testserver bleibt; geprüft wird, dass install.sh den
+#        Schlüssel festhält; der echte zweite Kanal muss die mit dem Wegwerf-Schlüssel nicht signierte Liste
+#        ablehnen (Exit 3); die Abfrage des veröffentlichten Releases steht jetzt in veroeffentlichung-pruefen.sh
 # 1.0.1: fehlt install-sh.log noch, keine Meldung der Shell mehr (Reihenfolge der Umleitungen)
 # Prüft den ganzen Weg auf einem TESTSERVER mit Debian 13, KeyHelp und schon installiertem PHP 5.6
 # dieses Projekts: Wegwerf-Schlüssel erzeugen, ein Release mit dem echten Installer und dem echten
 # Ergänzungssatz bauen, signieren und prüfen, es mit dem install.sh aus diesem Release einspielen
 # (update im leichten Zweig, mit --voll auch im vollen Zweig) und danach khli-php56 check.
-# Dazu zwei Abfragen ohne Installation: der echte zweite Kanal und das neueste Release auf GitHub.
 # Verändert den Server wie ein update von Hand. Nur auf Testservern.
 #
 # Aufruf als root: bash tests/ende-zu-ende.sh --testserver <ergaenzungssatz.tar.xz> [--voll]
@@ -31,7 +35,17 @@ if [ $# -eq 3 ]; then [ "$3" = --voll ] || fehler "drittes Argument: --voll" 2; 
 [ -f "$erg" ] || fehler "Ergänzungssatz nicht gefunden: $erg" 4
 
 t=$(mktemp -d /var/tmp/khli-e2e.XXXXXX)
-trap 'rm -rf -- "$t"' EXIT
+PIN=/var/lib/khli-php56/release-ed25519.pub
+GEN=/var/lib/khli-php56/freigaben-generation
+[ -f "$PIN" ] && cp -p -- "$PIN" "$t/pin-vorher"
+[ -f "$GEN" ] && cp -p -- "$GEN" "$t/gen-vorher"
+wiederherstellen() {
+  # festgehaltener Schlüssel und Generation wie vor dem Test; der Wegwerf-Schlüssel bleibt nicht
+  if [ -f "$t/pin-vorher" ]; then cp -p -- "$t/pin-vorher" "$PIN"; else rm -f -- "$PIN"; fi
+  if [ -f "$t/gen-vorher" ]; then cp -p -- "$t/gen-vorher" "$GEN"; else rm -f -- "$GEN"; fi
+  rm -rf -- "$t"
+}
+trap wiederherstellen EXIT
 PW=wegwerf-passphrase-ende-zu-ende
 ok=0 fehl=0
 schritt() {
@@ -50,12 +64,14 @@ bedingung() {
   else fehl=$((fehl + 1)); printf 'FEHL %-4s nicht erfüllt: %s\n' "$name" "$*"; fi
 }
 
-printf 'ende-zu-ende 1.0.1, %s, Debian %s, KeyHelp-Server, installiert: %s\n' "$(openssl version | cut -d' ' -f1-2)" \
+printf 'ende-zu-ende 1.1.0, %s, Debian %s, KeyHelp-Server, installiert: %s\n' "$(openssl version | cut -d' ' -f1-2)" \
   "$(cat /etc/debian_version)" "$(sed -n 's/^KHLI_VERSION=//p' /var/lib/khli-php56/zustand.env | tail -n 1)"
 printf 'Ergänzungssatz %s, SHA-256 %s\n' "$(basename -- "$erg")" "$(sha256 "$erg")"
+printf 'festgehaltener Schlüssel vorher: %s\n' "$([ -f "$t/pin-vorher" ] && echo "SHA256:$(schluessel_fingerabdruck "$t/pin-vorher")" || echo keiner)"
 openssl genpkey -algorithm ed25519 -aes-256-cbc -pass "pass:$PW" -out "$t/test.key" 2> /dev/null || fehler "kein Wegwerf-Schlüssel" 4
 openssl pkey -in "$t/test.key" -passin "pass:$PW" -pubout -out "$t/test.pub" || fehler "kein öffentlicher Schlüssel" 4
-printf 'Wegwerf-Schlüssel SHA256:%s (wird am Ende gelöscht)\n' "$(schluessel_fingerabdruck "$t/test.pub")"
+test_fp=$(schluessel_fingerabdruck "$t/test.pub")
+printf 'Wegwerf-Schlüssel SHA256:%s (wird am Ende gelöscht)\n' "$test_fp"
 log_vorher=$( { wc -l < /var/log/khli-php56/install-sh.log; } 2> /dev/null || echo 0)
 
 schritt E01 0 bash "$wurzel/werkzeuge/release-bauen.sh" --ohne-git --schluessel "$t/test.pub" "$erg" "$t/release"
@@ -63,9 +79,13 @@ printf '%s\n' "$PW" > "$t/pw"
 schritt E02 0 bash -c 'bash "$1" "$2" "$3" < "$4"' _ "$wurzel/werkzeuge/release-signieren.sh" "$t/release" "$t/test.key" "$t/pw"
 rm -f "$t/pw"
 schritt E03 0 bash "$wurzel/werkzeuge/release-pruefen.sh" "$t/release" "$t/test.pub"
-ZEILEN=14 schritt E04 0 bash "$t/release/install.sh" --quelle "$t/release" --ohne-zweiten-kanal
+# ein schon festgehaltener echter Schlüssel ist anders als der Wegwerf-Schlüssel: dann --neuer-schluessel
+neu=()
+[ -f "$t/pin-vorher" ] && neu=(--neuer-schluessel)
+ZEILEN=14 schritt E04 0 bash "$t/release/install.sh" --quelle "$t/release" --ohne-zweiten-kanal ${neu[@]+"${neu[@]}"}
 bedingung E04a grep -q 'starte khli-php56.sh update' "$t/E04.txt"
 bedingung E04b grep -q 'fertig: Release' "$t/E04.txt"
+bedingung E04c test "$(schluessel_fingerabdruck "$PIN")" = "$test_fp"
 schritt E05 0 /usr/local/sbin/khli-php56 check
 if [ "$voll" = 1 ]; then
   ZEILEN=14 schritt E06 0 bash "$t/release/install.sh" --quelle "$t/release" --ohne-zweiten-kanal -- --neu-aufbauen
@@ -75,12 +95,9 @@ schritt E08 0 /usr/local/sbin/khli-php56 status
 log_nachher=$( { wc -l < /var/log/khli-php56/install-sh.log; } 2> /dev/null || echo 0)
 bedingung E09 test "$log_nachher" -gt "$log_vorher"
 tail -n 2 /var/log/khli-php56/install-sh.log | sed 's/^/     | /'
-# ohne Installation: echter zweiter Kanal (Exit 0 auch ohne Liste, dann mit Warnung) und das neueste
-# Release auf GitHub (vor dem ersten Release Exit 1: SHA256SUMS fehlt)
-schritt E10 0 bash "$t/release/install.sh" --quelle "$t/release" --nur-pruefen
-ist=0
-bash "$t/release/install.sh" --nur-pruefen --ohne-zweiten-kanal > "$t/E11.txt" 2>&1 < /dev/null || ist=$?
-printf 'info E11  Exit %s: neuestes Release auf GitHub, nur prüfen\n' "$ist"
-sed 's/^/     | /' "$t/E11.txt" | tail -n 4
-printf 'Schritte: %d wie erwartet, %d anders\n' "$ok" "$fehl"
+# der echte zweite Kanal ist mit dem Schlüssel von Retrowork signiert, nicht mit dem Wegwerf-Schlüssel:
+# install.sh muss die Liste ablehnen (Exit 3, sperrt im Zweifel)
+schritt E10 3 bash "$t/release/install.sh" --quelle "$t/release" --nur-pruefen
+bedingung E10a grep -q 'keine gültige Signatur' "$t/E10.txt"
+printf 'Schritte: %d wie erwartet, %d anders (festgehaltener Schlüssel und Generation werden jetzt wiederhergestellt)\n' "$ok" "$fehl"
 [ "$fehl" -eq 0 ]
