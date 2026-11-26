@@ -6,7 +6,7 @@ PHP 5.6 for KeyHelp on Debian 13 (amd64). A Retrowork project.
 
 KeyHelp offers PHP 5.6 only up to Debian 12. This project sets up KeyHelp's own PHP 5.6 interpreter for Debian 12 on a KeyHelp server running Debian 13. It then shows up in the panel like the official interpreters, can be selected per domain and keeps the features it has on Debian 12.
 
-> **Status:** the first public release 0.4.15 is being prepared. It will appear under [Releases](https://github.com/Saugjunkie2/keyhelp-legacy-php-interpreter/releases) once it is signed with the project key. Until then nothing can be installed: the `install.sh` in this repository deliberately contains no key; installation only works with the `install.sh` from a release.
+> **Status:** release [0.4.15](https://github.com/Saugjunkie2/keyhelp-legacy-php-interpreter/releases/tag/v0.4.15) of 26 November 2026, the first public release. Install with the `install.sh` from the release (command below); the `install.sh` in this repository deliberately contains no key.
 
 ## Read this first
 
@@ -86,7 +86,7 @@ The same fingerprint is published on the second channel `https://lizenz.retrowor
 | Installer: installation, update, removal and 58 error and abort cases | all as expected; after removal the same package state as before | in a minimal Debian 13 environment (chroot) |
 | Use with KeyHelp | 5.6 selectable in the panel, KeyHelp creates pool and vhost and starts the service; websites, reboot, KeyHelp's maintenance jobs; update with less than one second of downtime | on the test server; visual check in the panel by Retrowork |
 | ionCube and SourceGuardian loaders | load and work as on Debian 12, including an application file encoded for PHP 5 in 2010 | in chroots and on the test server |
-| `install.sh` and the release tools | signature, checksums, revocation, older releases and installer start as expected in 90 cases; a signed test release applied as an update through its `install.sh`, in the light and the full branch, afterwards `check` and the website fine | on Windows (Git Bash) and as root in a Debian 13 chroot; end to end on the test server ([tests/](tests/)) |
+| `install.sh` and the release tools | signature, checksums, revocation, older releases and installer start as expected in 90 cases; a signed test release applied as an update through its `install.sh`, in the light and the full branch, afterwards `check` and the website fine; the published release 0.4.15 applied from GitHub with the command from this README, signature and release list valid | on Windows (Git Bash) and as root in a Debian 13 chroot; end to end on the test server ([tests/](tests/)) |
 
 Not tested: a KeyHelp self-update to a new major version; whether KeyHelp's `php-update` honours the switched-off setting (only relevant if KeyHelp ever offered a 5.6 package for Debian 13); use on many different servers. There has been no third-party review so far.
 

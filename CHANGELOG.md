@@ -2,7 +2,7 @@
 
 Ein Release trägt die Version seines Installers. Neue Einträge oben. / A release carries the version of its installer. Newest entries first.
 
-## 0.4.15 (in Vorbereitung / in preparation)
+## 0.4.15 (2026-11-26)
 
 Erstes öffentliches Release. / First public release.
 
