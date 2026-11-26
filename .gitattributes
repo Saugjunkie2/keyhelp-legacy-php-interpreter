@@ -1,0 +1,11 @@
+# Eigene Textdateien immer mit LF, auch beim Auschecken unter Windows
+* text=auto eol=lf
+*.sh text eol=lf
+*.md text eol=lf
+*.pub text eol=lf
+LICENSE text eol=lf
+NOTICE text eol=lf
+# Fremde Quellen und Archive nie umwandeln: ihre SHA-256 müssen gleich bleiben
+fremdquellen/** -text
+*.tar.gz binary
+*.tar.xz binary

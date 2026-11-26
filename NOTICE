@@ -1,0 +1,28 @@
+keyhelp-legacy-php-interpreter
+Copyright 2026 Retrowork
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+Dieses Produkt steht unter der Apache License 2.0 (siehe LICENSE).
+
+The supplement archive (khli-php56-ergaenzung-*.tar.xz) attached to the releases
+contains libraries built from the following third-party sources. Each keeps its
+own license; the copyright files are inside the archive under
+lib/khli/share/doc/<source>/ and listed with their SHA-256 in
+lib/khli/khli/HERKUNFT.tsv.
+
+  libvpx 1.12.0 (Debian 1.12.0-1+deb12u5)        BSD-3-Clause, patent license by Google
+  tidy-html5 5.6.0 (Debian 2:5.6.0-11)            HTML Tidy license
+  OpenLDAP 2.5.13 libraries (Debian 2.5.13+dfsg-5) OpenLDAP Public License 2.8
+  ImageMagick 6.9.11-60 (Debian ...deb12u15)      ImageMagick License
+  UW IMAP c-client 2007f (Sury 2007f~dfsg-7.1)    Apache License 2.0; Debian packaging GPL-2+
+                                                  (full source in fremdquellen/sury/uw-imap/)
+  libssh2 1.10.0 (Debian 1.10.0-3+deb12u1)        BSD-3-Clause
+
+KeyHelp's PHP 5.6 package is not included in this repository or in any release.
+The installer downloads it from KeyHelp's official source on the user's server.
+PHP is licensed under the PHP License 3.01.
+
+KeyHelp is a trademark of Keyweb AG. PHP is a trademark of The PHP Group.
+This project is not published by either of them. The Apache License grants no
+rights to the name Retrowork; modified versions must not present themselves as
+a Retrowork release.

@@ -1,0 +1,6 @@
+# gebaute Releases (werkzeuge/release-bauen.sh) und Arbeitsdateien
+dist/
+tmp/
+# private Schlüssel gehören nie in das Repository (werkzeuge/schluessel-erzeugen.sh verweigert das)
+*.key
+*.key.pem
