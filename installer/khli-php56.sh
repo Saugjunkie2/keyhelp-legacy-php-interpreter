@@ -1,5 +1,5 @@
 #!/bin/bash
-# khli-php56.sh - Version 0.4.16 (2026-11-26)
+# khli-php56.sh - Version 0.4.17 (2026-11-26)
 # Projekt keyhelp-legacy-php-interpreter: PHP 5.6 für KeyHelp unter Debian 13 (amd64).
 #
 # Installiert KeyHelps eigenen PHP-5.6-Interpreter für Debian 12 aus dem unveränderten Originalarchiv
@@ -34,7 +34,8 @@
 #              neuere nur mit --aelter-erlauben
 #   check      Dateien, Bibliotheken, Module, FPM-Konfiguration und Dienst; mit --cron nur Befunde
 #              (tägliche Prüfung über /etc/cron.d/khli-php56, cron schickt die Ausgabe an root); mit
-#              --module-merken gilt der jetzige Stand der Module als gewollt
+#              --module-merken gelten Module, die gegenüber dem letzten Aufbau jetzt fehlen, als gewollt
+#              abgeschaltet
 #   uninstall  nur, wenn die geprüften Nutzungen fehlen (KeyHelps Domains, geplante Aufgaben und
 #              Standard-Interpreter, Pools, Crontabs, systemd-Units); andere Aufrufe von PHP 5.6, etwa aus
 #              eigenen Skripten, erkennt er nicht; sichert vorher etc/, config.ini und Protokolle
@@ -53,6 +54,17 @@
 #       bricht ein Befehl unter set -e ab, endet der Lauf mit dessen Status, etwa 100 (apt-get) oder
 #       2 (tar, sort, dpkg-query; dann kein falscher Aufruf); seine Fehlermeldung steht im Protokoll
 #
+# 0.4.17: Befunde der unabhängigen Gegenprüfung vom 26.11.2026 (docs/reviews/2026-11-26_gegenpruefung-
+#        drittpruefung.md): die Modulliste entsteht nur noch bei einem Aufbau aus dem Originalarchiv
+#        (install, voller Zweig von update), check --module-merken hält nur Module als gewollt
+#        abgeschaltet fest, die jetzt fehlen (module-ohne.txt); Module aus eigenen ini-Dateien, die update
+#        nicht übernimmt, halten so kein update mehr auf (G-01); uninstall entfernt nur Pakete, die die
+#        Installation geplant hat (G-06); fehlt das Startskript, gilt ein laufender Dienst als nicht
+#        angehalten (G-07); wirkt service stop in der Rücknahme nicht, beendet sie den Hauptprozess aus der
+#        PID-Datei, sonst bleibt der Arbeitsordner zur Untersuchung (G-08); die Rücknahme legt auch
+#        Prüfwerkzeug und Cron-Datei zurück (F-014); Testschalter KHLI_TEST_STOPP=ruecknahme, Testabbruch
+#        nach_werkzeug, KHLI_TEST_EINGABE=tauschen auch für den Ergänzungssatz. 0.4.16 wurde nicht
+#        veröffentlicht
 # 0.4.16: Befunde der Drittprüfung vom 26.11.2026: check wertet den Exit-Code von php -m und ldd aus,
 #        verlangt die Grundmodule und meldet Module, die gegenüber der letzten erfolgreichen Prüfung
 #        fehlen (Liste im Zustand, check --module-merken übernimmt den jetzigen Stand; F-006); die
@@ -160,7 +172,7 @@ umask 022
 export LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-KHLI_VERSION=0.4.16
+KHLI_VERSION=0.4.17
 PHP_KURZ=56
 PHP_VER=5.6
 ZIEL=/opt/keyhelp/php/$PHP_VER
@@ -222,7 +234,8 @@ RUECKNAHME_OK=0
 RUECKNAHME_SIGNAL=0
 ZURUECKGEHOLT=0
 HINWEIS_OHNE_KEYHELP=0
-# Rücknahme ohne Zustand oder ELF-Tabelle: der Arbeitsordner mit ihren Sicherungen bleibt (0.4.16, F-007)
+# Rücknahme ohne Zustand oder ELF-Tabelle: der Arbeitsordner mit ihren Sicherungen bleibt (0.4.16, F-007);
+# ebenso, wenn der neue Dienst sich in der Rücknahme nicht beenden ließ (0.4.17, G-08)
 ARBEIT2_BEHALTEN=0
 
 meldung() { printf 'khli-php56: %s\n' "$*" 2>/dev/null || true; }
@@ -263,8 +276,12 @@ dienst_befehl() {
 dienst_anhalten() {
   # KeyHelps Startskript erkennt den Prozess an seinem Programmpfad; deshalb vor jedem Tausch. Ab 0.4.16
   # Rückgabe 1, wenn der Dienst nach dem Anhalten noch läuft: gewartet wird bis zu zehn Sekunden nach der
-  # Uhr (F-008)
-  [ -x "/etc/init.d/$DIENST" ] || return 0
+  # Uhr (F-008); ab 0.4.17 auch, wenn das Startskript fehlt und der Dienst trotzdem läuft (G-07)
+  if [ ! -x "/etc/init.d/$DIENST" ]; then
+    fpm_laeuft || return 0
+    meldung "Warnung: /etc/init.d/$DIENST fehlt, der Dienst läuft aber; über das Startskript lässt er sich nicht anhalten"
+    return 1
+  fi
   if ! test_stopp_scheitert; then dienst_befehl stop > /dev/null 2>&1 9>&- || true; fi
   local ende=$((SECONDS + 10))
   while fpm_laeuft; do
@@ -277,8 +294,9 @@ dienst_anhalten() {
 dienst_neu_starten() {
   # restart statt start: systemd führt den LSB-Dienst auch nach einem Absturz als "active (exited)",
   # ein start bliebe dann wirkungslos (E-0044); gewartet wird bis zu zehn Sekunden nach der Uhr, damit
-  # ein Signal, das ein sleep beendet, die Wartezeit nicht verkürzt (I-36)
-  [ -x "/etc/init.d/$DIENST" ] || return 0
+  # ein Signal, das ein sleep beendet, die Wartezeit nicht verkürzt (I-36). Ohne Startskript ab 0.4.17
+  # Rückgabe 1 statt 0: der Dienst läuft dann nicht (G-07)
+  [ -x "/etc/init.d/$DIENST" ] || { meldung "Warnung: /etc/init.d/$DIENST fehlt; der Dienst lässt sich nicht starten"; return 1; }
   dienst_befehl restart > /dev/null 2>&1 9>&- || meldung "Warnung: service $DIENST restart endete mit einem Fehler"
   local ende=$((SECONDS + 10))
   while [ "$SECONDS" -lt "$ende" ]; do
@@ -286,6 +304,23 @@ dienst_neu_starten() {
     sleep 1 || true
   done
   fpm_laeuft
+}
+
+fpm_beenden() {
+  # beendet den Hauptprozess des Dienstes aus der PID-Datei, nur wenn er aus $ZIEL läuft (fpm_laeuft prüft
+  # den Programmpfad); für die Rücknahme, wenn service stop nicht wirkte (0.4.17, G-08). Rückgabe 1, wenn
+  # er nach zehn Sekunden noch läuft
+  local pid
+  fpm_laeuft || return 0
+  pid=$(cat "$PIDDATEI" 2>/dev/null) || return 1
+  meldung "beende den Hauptprozess $pid von $DIENST (aus $ZIEL)"
+  kill -TERM "$pid" 2>/dev/null || true
+  local ende=$((SECONDS + 10))
+  while fpm_laeuft; do
+    [ "$SECONDS" -lt "$ende" ] || return 1
+    sleep 1 || true
+  done
+  return 0
 }
 
 signale_vermerken() {
@@ -317,8 +352,14 @@ test_ruecknahme_dienst_scheitert() {
 }
 
 test_stopp_scheitert() {
-  # nur im Testmodus ohne KeyHelp: service stop hält den Dienst nicht an (0.4.16, F-008)
-  { [ "$OHNE_KEYHELP" = 1 ] || [ "$(zustand_wert OHNE_KEYHELP)" = 1 ]; } && ! keyhelp_da && [ "${KHLI_TEST_STOPP:-}" = scheitern ]
+  # nur im Testmodus ohne KeyHelp: service stop hält den Dienst nicht an (0.4.16, F-008); mit ruecknahme nur
+  # in der Rücknahme (0.4.17, G-08)
+  { [ "$OHNE_KEYHELP" = 1 ] || [ "$(zustand_wert OHNE_KEYHELP)" = 1 ]; } && ! keyhelp_da || return 1
+  case "${KHLI_TEST_STOPP:-}" in
+    scheitern) return 0 ;;
+    ruecknahme) [ "$IN_RUECKNAHME" = 1 ] ;;
+    *) return 1 ;;
+  esac
 }
 
 test_apt_entfernt() {
@@ -327,12 +368,15 @@ test_apt_entfernt() {
 }
 
 test_eingabe_tauschen() {
-  # nur im Testmodus ohne KeyHelp: nach der Prüfung wird die angegebene Originaldatei überschrieben; der
-  # Lauf muss mit seiner Kopie weitergehen (0.4.16, F-013)
-  if { [ "$OHNE_KEYHELP" = 1 ] || [ "$(zustand_wert OHNE_KEYHELP)" = 1 ]; } && ! keyhelp_da && [ "${KHLI_TEST_EINGABE:-}" = tauschen ] && [ -n "$OPT_ORIGINAL" ]; then
-    meldung "Testtausch: $OPT_ORIGINAL wird nach der Prüfung überschrieben"
-    printf 'ausgetauscht\n' > "$OPT_ORIGINAL"
-  fi
+  # nur im Testmodus ohne KeyHelp: nach der Prüfung werden die angegebenen Dateien (Originalpaket, ab 0.4.17
+  # auch Ergänzungssatz) überschrieben; der Lauf muss mit seinen Kopien weitergehen (0.4.16, F-013)
+  { [ "$OHNE_KEYHELP" = 1 ] || [ "$(zustand_wert OHNE_KEYHELP)" = 1 ]; } && ! keyhelp_da && [ "${KHLI_TEST_EINGABE:-}" = tauschen ] || return 0
+  local f
+  for f in "$OPT_ORIGINAL" "$OPT_ERGAENZUNG"; do
+    [ -n "$f" ] || continue
+    meldung "Testtausch: $f wird nach der Prüfung überschrieben"
+    printf 'ausgetauscht\n' > "$f"
+  done
   return 0
 }
 
@@ -364,9 +408,13 @@ zuruecknehmen_ablauf() {
   local unvollstaendig=""
   if [ -n "$ARBEIT2" ] && [ -d "$ARBEIT2/alt" ]; then
     if [ -e "$ZIEL" ]; then
-      if ! dienst_anhalten; then
+      # ab 0.4.17: wirkt service stop nicht, wird der Hauptprozess aus der PID-Datei beendet, solange er
+      # noch aus $ZIEL läuft (nach dem Beiseitelegen erkennt ihn fpm_laeuft nicht mehr); läuft er dann
+      # immer noch, bleibt der Arbeitsordner samt neuem Ordner zur Untersuchung (G-08)
+      if ! dienst_anhalten && ! fpm_beenden; then
         meldung "Warnung: $DIENST läuft nach dem Anhalten noch (aus dem neuen Ordner)"
         unvollstaendig="$unvollstaendig Anhalten"
+        ARBEIT2_BEHALTEN=1
       fi
       testabbruch ruecknahme
       if ! ohne_signale mv -T "$ZIEL" "$ARBEIT2/neu-fehlerhaft"; then
@@ -386,6 +434,18 @@ zuruecknehmen_ablauf() {
   fi
   if [ -n "$ARBEIT2" ] && [ -f "$ARBEIT2/elf-alt.tsv" ]; then
     ohne_signale cp "$ARBEIT2/elf-alt.tsv" "$ZUSTAND/elf-aenderungen.tsv" || { unvollstaendig="$unvollstaendig ELF-Tabelle"; ARBEIT2_BEHALTEN=1; }
+  fi
+  # ab 0.4.17 auch Prüfwerkzeug und Cron-Datei, wenn werkzeug_einrichten sie in diesem Lauf schon ersetzt
+  # hatte (F-014); was es neu angelegt hatte, wird entfernt
+  if [ -n "$ARBEIT2" ] && [ -f "$ARBEIT2/werkzeug-alt" ]; then
+    ohne_signale cp -a "$ARBEIT2/werkzeug-alt" "$WERKZEUG" || { unvollstaendig="$unvollstaendig Prüfwerkzeug"; ARBEIT2_BEHALTEN=1; }
+  elif [ -n "$ARBEIT2" ] && [ -e "$ARBEIT2/werkzeug-neu" ]; then
+    ohne_signale rm -f "$WERKZEUG" || unvollstaendig="$unvollstaendig Prüfwerkzeug"
+  fi
+  if [ -n "$ARBEIT2" ] && [ -f "$ARBEIT2/cron-alt" ]; then
+    ohne_signale cp -a "$ARBEIT2/cron-alt" "$CRON" || { unvollstaendig="$unvollstaendig Cron-Datei"; ARBEIT2_BEHALTEN=1; }
+  elif [ -n "$ARBEIT2" ] && [ -e "$ARBEIT2/cron-neu" ]; then
+    ohne_signale rm -f "$CRON" || unvollstaendig="$unvollstaendig Cron-Datei"
   fi
   if [ "$LIEF" = 1 ] || pools_da; then
     if test_ruecknahme_dienst_scheitert || ! dienst_neu_starten; then
@@ -429,7 +489,7 @@ aufraeumen() {
     # Sicherheitsnetz: ein bisheriger Ordner wird nur nach bestätigtem Tausch gelöscht (I-24)
     meldung "Warnung: der bisherige Ordner bleibt in $ARBEIT2/alt (Tausch nicht bestätigt)"
   elif [ -n "$ARBEIT2" ] && [ "$ARBEIT2_BEHALTEN" = 1 ]; then
-    meldung "Warnung: der Arbeitsordner $ARBEIT2 bleibt (Sicherungen von Zustand und ELF-Tabelle)"
+    meldung "Warnung: der Arbeitsordner $ARBEIT2 bleibt zur Untersuchung (Sicherungen aus der Rücknahme, neuer Ordner unter neu-fehlerhaft)"
   elif [ -n "$ARBEIT2" ]; then
     ohne_signale rm -rf "$ARBEIT2"
   fi
@@ -930,12 +990,18 @@ zustand_migrieren() {
 }
 
 werkzeug_einrichten() {
-  # Prüfwerkzeug für den Verwalter und tägliche Prüfung; beides entfernt der Rückbau
+  # Prüfwerkzeug für den Verwalter und tägliche Prüfung; beides entfernt der Rückbau. Während des Tauschs
+  # eines update hält es ab 0.4.17 vorher fest, was es ersetzt, damit die Rücknahme es zurücklegt (F-014)
+  local merken=0
+  if [ -n "$TAUSCH_PHASE" ] && [ -n "$ARBEIT2" ] && [ -d "$ARBEIT2" ]; then merken=1; fi
   if [ -e "$WERKZEUG" ] && ! grep -q '^# khli-php56.sh - Version' "$WERKZEUG"; then
     meldung "Warnung: $WERKZEUG stammt nicht von khli-php56; nicht ersetzt, keine tägliche Prüfung"
     return 0
   fi
   if [ ! "$SKRIPT" -ef "$WERKZEUG" ]; then
+    if [ "$merken" = 1 ]; then
+      if [ -f "$WERKZEUG" ]; then cp -a "$WERKZEUG" "$ARBEIT2/werkzeug-alt"; else : > "$ARBEIT2/werkzeug-neu"; fi
+    fi
     install -m 0755 "$SKRIPT" "$WERKZEUG.khli-neu"
     mv "$WERKZEUG.khli-neu" "$WERKZEUG"
   fi
@@ -947,6 +1013,9 @@ werkzeug_einrichten() {
   if [ -e "$CRON" ] && ! grep -q '^# khli-php56' "$CRON"; then
     meldung "Warnung: $CRON stammt nicht von khli-php56; nicht ersetzt"
     return 0
+  fi
+  if [ "$merken" = 1 ]; then
+    if [ -f "$CRON" ]; then cp -a "$CRON" "$ARBEIT2/cron-alt"; else : > "$ARBEIT2/cron-neu"; fi
   fi
   printf '%s\n' "# khli-php56 $KHLI_VERSION: tägliche Prüfung von PHP $PHP_VER nach KeyHelps Wartungsjob php-update (6 bis 7 Uhr)." \
     "# Ausgabe nur bei Befunden; cron schickt sie an root. Entfernt mit 'khli-php56 uninstall'." \
@@ -1026,7 +1095,7 @@ install_befehl() {
   zustand_setzen STATUS=installiert "INSTALLIERT=$(datum)"
   # 6. Prüfung
   if check_befehl --still && [ "$(zustand_wert INSTALL_SH_EXIT)" = 0 ]; then
-    module_merken
+    module_merken frisch
     meldung "Installation abgeschlossen: PHP $("$ZIEL/bin/php" -r 'echo PHP_VERSION;' 2>/dev/null)"
     return 0
   fi
@@ -1093,8 +1162,10 @@ update_befehl() {
     autoupdate_aus "$ZIEL"
     werkzeug_einrichten
     zustand_setzen "KHLI_VERSION=$KHLI_VERSION" "AKTUALISIERT=$(datum)"
-    module_merken
+    # ab 0.4.17 keine Modulliste aus dem leichten Zweig: der Ordner kann Module aus eigenen ini-Dateien
+    # laden, die ein späteres update nicht übernimmt (G-01)
     meldung "Interpreter unverändert (Originalpaket und Ergänzungssatz wie installiert, check in Ordnung); Werkzeug und Zustand erneuert; --neu-aufbauen baut ihn trotzdem neu auf"
+    if [ ! -f "$ZUSTAND/module.txt" ]; then meldung "Hinweis: noch keine Modulliste für check; sie entsteht beim nächsten Aufbau aus dem Originalarchiv (update --neu-aufbauen)"; fi
     return 0
   fi
   arbeitsordner2_anlegen
@@ -1130,11 +1201,13 @@ update_befehl() {
   keyhelp_install_sh
   testabbruch nach_install_sh
   if [ "$dienst_ok" = 1 ] && ! test_pruefung_scheitert && check_befehl --still && [ "$(zustand_wert INSTALL_SH_EXIT)" = 0 ]; then
-    # ab 0.4.16 erst Werkzeug, Fassung und Modulliste, dann gilt der Tausch als bestätigt; scheitert einer
-    # dieser Schritte, nimmt die EXIT-Falle den Tausch zurück (F-014)
+    # ab 0.4.16 erst Werkzeug, Fassung und Modulliste, dann gilt der Tausch als bestätigt; bricht der Lauf
+    # dabei ab, nimmt die EXIT-Falle den Tausch zurück, ab 0.4.17 samt Werkzeug und Cron-Datei (F-014).
+    # Eine nicht geschriebene Modulliste oder ein fremdes Werkzeug sind nur Warnungen
     werkzeug_einrichten
+    testabbruch nach_werkzeug
     zustand_setzen "KHLI_VERSION=$KHLI_VERSION" "AKTUALISIERT=$(datum)"
-    module_merken
+    module_merken frisch
     TAUSCH_OK=1
     TAUSCH_PHASE=""
     if [ -d "$ARBEIT2/alt" ]; then unterschiede_melden "$ARBEIT2/alt" "$ZIEL"; fi
@@ -1158,17 +1231,38 @@ update_befehl() {
 }
 
 module_merken() {
-  # hält fest, welche Module php -m jetzt meldet, mit dem SHA-256 des Originalpakets in der ersten Zeile;
-  # check vergleicht damit, solange das Originalpaket dasselbe ist (0.4.16, F-006). Scheitert es, bleibt
-  # die bisherige Liste, und es gibt nur eine Warnung
-  local liste
+  # frisch (install und voller Zweig von update, nach erfolgreicher Prüfung): module.txt hält fest, welche
+  # Module php -m nach einem Aufbau aus dem Originalarchiv meldet, mit dem SHA-256 des Originalpakets in der
+  # ersten Zeile; check vergleicht damit, solange das Originalpaket dasselbe ist (0.4.16, F-006). Eine
+  # bisherige module-ohne.txt entfällt, weil der neue Ordner wieder die Einstellungen des Originals hat.
+  # annehmen (check --module-merken): Module aus module.txt, die jetzt fehlen, gelten als gewollt
+  # abgeschaltet (module-ohne.txt). Module aus eigenen ini-Dateien kommen so nie in die Liste; update
+  # übernimmt solche Dateien nicht, und sie hielten sonst jedes update auf (0.4.17, G-01).
+  # Scheitert es, bleibt die bisherige Liste, und es gibt nur eine Warnung
+  local modus=$1 liste
   [ -d "$ZUSTAND" ] || return 0
   liste=$("$ZIEL/bin/php" -m 2>/dev/null) || { meldung "Warnung: php -m scheitert, Modulliste nicht festgehalten"; return 0; }
-  if { printf '# original %s\n' "$(zustand_wert ORIGINAL_SHA256)"; grep -vE '^\[|^$' <<< "$liste" | LC_ALL=C sort -u; } > "$ZUSTAND/module.txt.neu" 2> /dev/null; then
-    mv "$ZUSTAND/module.txt.neu" "$ZUSTAND/module.txt" || meldung "Warnung: Modulliste nicht geschrieben"
+  liste=$(grep -vE '^\[|^$' <<< "$liste" | LC_ALL=C sort -u || true)
+  if [ "$modus" = frisch ]; then
+    if { printf '# original %s\n' "$(zustand_wert ORIGINAL_SHA256)"; printf '%s\n' "$liste"; } > "$ZUSTAND/module.txt.neu" 2> /dev/null \
+       && mv "$ZUSTAND/module.txt.neu" "$ZUSTAND/module.txt"; then
+      rm -f "$ZUSTAND/module-ohne.txt"
+    else
+      rm -f "$ZUSTAND/module.txt.neu"
+      meldung "Warnung: Modulliste nicht geschrieben"
+    fi
+    return 0
+  fi
+  if [ ! -f "$ZUSTAND/module.txt" ] || [ "$(sed -n '1s/^# original //p' "$ZUSTAND/module.txt")" != "$(zustand_wert ORIGINAL_SHA256)" ]; then
+    meldung "check: noch keine Modulliste zu diesem Originalpaket; sie entsteht beim nächsten Aufbau aus dem Originalarchiv (update --neu-aufbauen)"
+    return 0
+  fi
+  if grep -v '^#' "$ZUSTAND/module.txt" | LC_ALL=C comm -23 - <(printf '%s\n' "$liste") > "$ZUSTAND/module-ohne.txt.neu" 2> /dev/null \
+     && mv "$ZUSTAND/module-ohne.txt.neu" "$ZUSTAND/module-ohne.txt"; then
+    meldung "check: Modulliste übernommen; als gewollt abgeschaltet gelten: $(if [ -s "$ZUSTAND/module-ohne.txt" ]; then tr '\n' ' ' < "$ZUSTAND/module-ohne.txt"; else echo keine; fi)"
   else
-    rm -f "$ZUSTAND/module.txt.neu"
-    meldung "Warnung: Modulliste nicht geschrieben"
+    rm -f "$ZUSTAND/module-ohne.txt.neu"
+    meldung "Warnung: Liste der abgeschalteten Module nicht geschrieben"
   fi
   return 0
 }
@@ -1184,10 +1278,10 @@ check_befehl() {
   esac
   [ "$(id -u)" -eq 0 ] || fehler "nur als root" 4
   if [ "$modus" = merken ]; then
-    # der jetzige Stand der Module gilt als gewollt, etwa nach einer bewussten Änderung an etc/conf.d
+    # Module, die gegenüber dem letzten Aufbau jetzt fehlen, gelten als gewollt abgeschaltet, etwa nach
+    # einer bewussten Änderung an etc/conf.d (ab 0.4.17 kommt kein Modul mehr dazu, G-01)
     [ -f "$ZUSTAND/zustand.env" ] || fehler "kein Zustand unter $ZUSTAND" 1
-    module_merken
-    meldung "check: Modulliste übernommen ($(grep -vc '^#' "$ZUSTAND/module.txt" 2>/dev/null || true) Module)"
+    module_merken annehmen
   fi
   if [ "$modus" = cron ]; then
     # während eines Laufs von install, update oder uninstall nichts melden (keine Scheinbefunde)
@@ -1240,8 +1334,9 @@ check_befehl() {
     if [ -n "$fehlt" ]; then meldung "check: ${f#"$ZIEL"/} findet nicht: $fehlt"; befunde=$((befunde + 1))
     elif [ "$lrc" -ne 0 ]; then meldung "check: ldd scheitert an ${f#"$ZIEL"/} (Exit $lrc): $(head -n 1 <<< "$lout")"; befunde=$((befunde + 1)); fi
   done
-  # php -m: ab 0.4.16 zählt der Exit-Code, die Grundmodule müssen da sein, und gegenüber der letzten
-  # erfolgreichen Prüfung (module.txt im Zustand, gleiches Originalpaket) darf kein Modul fehlen (F-006)
+  # php -m: ab 0.4.16 zählt der Exit-Code, die Grundmodule müssen da sein, und gegenüber dem letzten Aufbau
+  # (module.txt im Zustand, gleiches Originalpaket) darf kein Modul fehlen, außer es ist als gewollt
+  # abgeschaltet festgehalten (module-ohne.txt, ab 0.4.17) (F-006, G-01)
   local warn mrc=0 liste module kern="" fehlen="" m
   warn=$("$ZIEL/bin/php" -m 2>&1 >/dev/null) || mrc=$?
   liste=$("$ZIEL/bin/php" -m 2>/dev/null || true)
@@ -1254,8 +1349,8 @@ check_befehl() {
     for m in Core date pcre Reflection SPL standard; do grep -qxF "$m" <<< "$module" || kern="$kern $m"; done
     if [ -n "$kern" ]; then meldung "check: php -m nennt die Grundmodule nicht:$kern"; befunde=$((befunde + 1)); fi
     if [ -f "$ZUSTAND/module.txt" ] && [ "$(sed -n '1s/^# original //p' "$ZUSTAND/module.txt")" = "$(zustand_wert ORIGINAL_SHA256)" ]; then
-      fehlen=$(grep -v '^#' "$ZUSTAND/module.txt" | LC_ALL=C comm -23 - <(printf '%s\n' "$module") | tr '\n' ' ' || true)
-      if [ -n "$fehlen" ]; then meldung "check: gegenüber der letzten erfolgreichen Prüfung fehlen Module: ${fehlen% }; ist das gewollt, übernimmt 'khli-php56 check --module-merken' den jetzigen Stand"; befunde=$((befunde + 1)); fi
+      fehlen=$(grep -v '^#' "$ZUSTAND/module.txt" | LC_ALL=C comm -23 - <(LC_ALL=C sort -u "$ZUSTAND/module-ohne.txt" 2>/dev/null || true) | LC_ALL=C comm -23 - <(printf '%s\n' "$module") | tr '\n' ' ' || true)
+      if [ -n "$fehlen" ]; then meldung "check: gegenüber dem letzten Aufbau fehlen Module: ${fehlen% }; ist das gewollt, hält 'khli-php56 check --module-merken' sie als abgeschaltet fest"; befunde=$((befunde + 1)); fi
     fi
     if [ -z "$kern" ] && [ -z "$fehlen" ]; then meldung "check: php -m ohne Startfehler, $(grep -c . <<< "$module" || true) Module"; fi
   fi
@@ -1398,8 +1493,18 @@ pakete_entfernen() {
   # solche, die KeyHelps übrige Interpreter laden. Was entfernt werden sollte und nicht entfernt
   # werden konnte (Simulation gescheitert, dpkg gescheitert), kommt in eine Liste unter dem
   # Protokollordner, und uninstall endet mit Exit 1 (I-32).
-  local alle p kand="" hand="" abh="" kh="" gehalten="" gescheitert="" menge fremd neu i x andere
-  alle=$(cat "$ZUSTAND/pakete-neu.txt" "$ZUSTAND/pakete-geplant.txt" 2>/dev/null | sort -u | comm -23 - "$ZUSTAND/pakete-vorher.txt" || true)
+  local alle p kand="" hand="" abh="" kh="" gehalten="" gescheitert="" menge fremd neu i x andere ungeplant
+  if [ -s "$ZUSTAND/pakete-geplant.txt" ]; then
+    # ab 0.4.17 nur, was die Installation geplant hat (der Plan von apt enthält auch die Abhängigkeiten): in
+    # Zuständen bis 0.4.15 kann pakete-neu.txt Pakete aus dem Lauf von KeyHelps install.sh enthalten, die
+    # auch ein anderer Lauf installiert haben kann; sie bleiben (G-06)
+    alle=$(sort -u "$ZUSTAND/pakete-geplant.txt" | comm -23 - "$ZUSTAND/pakete-vorher.txt" || true)
+    ungeplant=$(sort -u "$ZUSTAND/pakete-neu.txt" 2>/dev/null | comm -23 - <(sort -u "$ZUSTAND/pakete-geplant.txt") | comm -23 - "$ZUSTAND/pakete-vorher.txt" | tr '\n' ' ' || true)
+    [ -z "${ungeplant// /}" ] || meldung "Hinweis: nicht von der Installation geplant, deshalb nicht entfernt: ${ungeplant% }"
+  else
+    # Zustand ohne Plan (vor 0.3): wie bisher alles, was die Installation neu installiert hat
+    alle=$(sort -u "$ZUSTAND/pakete-neu.txt" 2>/dev/null | comm -23 - "$ZUSTAND/pakete-vorher.txt" || true)
+  fi
   if [ -z "$alle" ]; then meldung "keine Pakete zu entfernen"; return 0; fi
   manuell_liste > "$ZUSTAND/.manuell-jetzt"
   if [ -f "$ZUSTAND/manuell-nachher.txt" ]; then

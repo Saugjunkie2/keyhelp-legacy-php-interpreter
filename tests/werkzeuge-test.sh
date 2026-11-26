@@ -1,5 +1,10 @@
 #!/bin/bash
-# werkzeuge-test.sh - Version 1.1.0
+# werkzeuge-test.sh - Version 1.2.0
+# 1.2.0: für install.sh 1.1.1 und freigabe-eintragen.sh 1.2.0 (unabhängige Gegenprüfung vom 26.11.2026):
+#        unbekannter Status in der Liste (K18), Schlüsselwechsel mit fortgeführter Generation (K15 bis K17,
+#        G-03), -- --original <datei> erreicht den Installer (B05b, T-01), nach einem Exit ungleich 0 wird
+#        kein Schlüssel festgehalten (B06a), unlesbarer festgehaltener Schlüssel (B15, B16) und unlesbare
+#        Generation (B17) (G-04)
 # 1.1.0: für install.sh 1.1.0 und die Werkzeuge 1.1.0 (Drittprüfung vom 26.11.2026): der zweite Kanal
 #        sperrt im Zweifel (nicht erreichbar, fremd signiert, nicht gelistet, ohne Generation, abgelaufen,
 #        ältere Generation), Generation und Erneuern der Freigabeliste, nur erlaubte Optionen für den
@@ -109,7 +114,7 @@ liste_schreiben() {
 }
 kanal_kopie() { sed "s|^ZWEITER_KANAL=.*|ZWEITER_KANAL=$t/$2|" "$1" > "$t/install-$2.sh"; }
 
-printf 'werkzeuge-test 1.1.0, %s, %s\n' "$(openssl version)" "$(uname -s)"
+printf 'werkzeuge-test 1.2.0, %s, %s\n' "$(openssl version)" "$(uname -s)"
 
 # Testbaum: install.sh und werkzeuge/ aus diesem Repository, Attrappen von Installer und Ergänzungssatz
 r=$t/repo
@@ -320,6 +325,24 @@ pruefe K12a grep -qx '# generation 3' "$t/kanal/freigaben.txt"
 fall K13 5 bash "$t/install-kanal.sh" --quelle "$t/r1" --nur-pruefen
 pruefe K13a ausgabe_hat "ist widerrufen: Test eines Widerrufs"
 fall K14 0 bash "$t/install-kanal.sh" --quelle "$t/r1" --nur-pruefen --ohne-zweiten-kanal
+# Schlüsselwechsel (G-03): die Liste trägt noch den bisherigen Schlüssel, das Repository schon den neuen (hier
+# der fremde Testschlüssel); ohne --bisheriger-schluessel Exit 3 mit Hinweis, mit ihm geprüft, mit der nächsten
+# Generation fortgeführt und mit dem neuen Schlüssel signiert
+rm -rf "$t/repo2" "$t/kanalw"
+cp -r "$r" "$t/repo2"
+cp -- "$t/fremd.pub" "$t/repo2/schluessel/release-ed25519.pub"
+cp -r "$t/kanal" "$t/kanalw"
+fall_mit_eingabe K15 3 "$PW"$'\n' bash "$t/repo2/werkzeuge/freigabe-eintragen.sh" --erneuern "$t/kanalw/freigaben.txt" "$t/fremd.key"
+pruefe K15a ausgabe_hat "--bisheriger-schluessel"
+fall_mit_eingabe K16 0 "$PW"$'\n' bash "$t/repo2/werkzeuge/freigabe-eintragen.sh" --bisheriger-schluessel "$r/schluessel/release-ed25519.pub" --erneuern "$t/kanalw/freigaben.txt" "$t/fremd.key"
+pruefe K16a grep -qx '# generation 4' "$t/kanalw/freigaben.txt"
+pruefe K16b openssl pkeyutl -verify -pubin -inkey "$t/fremd.pub" -rawin -in "$t/kanalw/freigaben.txt" -sigfile "$t/kanalw/freigaben.txt.sig"
+fall_mit_eingabe K17 2 "$PW"$'\n' bash "$t/repo2/werkzeuge/freigabe-eintragen.sh" --bisheriger-schluessel "$t/repo2/schluessel/release-ed25519.pub" --erneuern "$t/kanalw/freigaben.txt" "$t/fremd.key"
+# unbekannter Status in einer gültigen Liste: Exit 5
+liste_schreiben "$t/kanal6" 8 "$morgen" "0.4.16 $summe1 vielleicht $heute"
+kanal_kopie "$inst" kanal6
+fall K18 5 bash "$t/install-kanal6.sh" --quelle "$t/r1" --nur-pruefen
+pruefe K18a ausgabe_hat "unbekannter Status vielleicht"
 
 if [ "$(id -u)" = 0 ] && [ "$(cut -d. -f1 /etc/debian_version 2> /dev/null)" = 13 ] \
    && [ "$(dpkg --print-architecture 2> /dev/null)" = amd64 ] && [ ! -e /var/lib/khli-php56 ] && [ ! -e /opt/keyhelp/php/5.6 ]; then
@@ -348,7 +371,15 @@ if [ "$(id -u)" = 0 ] && [ "$(cut -d. -f1 /etc/debian_version 2> /dev/null)" = 1
   printf 'KHLI_VERSION=0.4.16\nSTATUS=installiert\n' > /var/lib/khli-php56/zustand.env
   fall B05 0 bash "$inst" --quelle "$t/r1" --ohne-zweiten-kanal -- --neu-aufbauen
   pruefe B05a test "$(tail -n 1 "$KHLI_TEST_AUFRUF")" = --neu-aufbauen
+  # der dokumentierte Weg "Originalpaket aufbewahren": --original <datei> erreicht den Installer (T-01)
+  printf 'Attrappe des Originals\n' > "$t/original.tar.gz"
+  fall B05b 0 bash "$inst" --quelle "$t/r1" --ohne-zweiten-kanal -- --original "$t/original.tar.gz"
+  pruefe B05c test "$(tail -n 2 "$KHLI_TEST_AUFRUF" | tr '\n' ' ')" = "--original $t/original.tar.gz "
+  # nach einem Exit ungleich 0 hält install.sh keinen Schlüssel fest
+  mv /var/lib/khli-php56/release-ed25519.pub "$t/pin.sik"
   fall B06 7 env KHLI_TEST_EXIT=7 bash "$inst" --quelle "$t/r1" --ohne-zweiten-kanal
+  pruefe B06a test ! -e /var/lib/khli-php56/release-ed25519.pub
+  mv "$t/pin.sik" /var/lib/khli-php56/release-ed25519.pub
   rm -f "$KHLI_TEST_AUFRUF"
   fall B07 5 bash "$t/install-kanal.sh" --quelle "$t/r1"
   pruefe B07a test ! -e "$KHLI_TEST_AUFRUF"
@@ -370,6 +401,21 @@ if [ "$(id -u)" = 0 ] && [ "$(cut -d. -f1 /etc/debian_version 2> /dev/null)" = 1
   pruefe B11b test ! -e "$KHLI_TEST_AUFRUF"
   fall B12 0 bash "$t/rf/install.sh" --quelle "$t/rf" --ohne-zweiten-kanal --neuer-schluessel
   pruefe B12a test "$(schluessel_fingerabdruck /var/lib/khli-php56/release-ed25519.pub)" = "$(schluessel_fingerabdruck "$t/fremd.pub")"
+  # unlesbarer festgehaltener Schlüssel (G-04): Exit 3 mit Meldung, mit --neuer-schluessel ersetzt
+  : > /var/lib/khli-php56/release-ed25519.pub
+  rm -f "$KHLI_TEST_AUFRUF"
+  fall B15 3 bash "$inst" --quelle "$t/r1" --ohne-zweiten-kanal
+  pruefe B15a ausgabe_hat "ist nicht lesbar"
+  pruefe B15b test ! -e "$KHLI_TEST_AUFRUF"
+  fall B16 0 bash "$inst" --quelle "$t/r1" --ohne-zweiten-kanal --neuer-schluessel
+  pruefe B16a test "$(schluessel_fingerabdruck /var/lib/khli-php56/release-ed25519.pub)" = "$(schluessel_fingerabdruck "$r/schluessel/release-ed25519.pub")"
+  # unlesbare Generation (G-04): Exit 5 mit Meldung, der Installer startet nicht
+  printf 'x\n' > /var/lib/khli-php56/freigaben-generation
+  rm -f "$KHLI_TEST_AUFRUF"
+  fall B17 5 bash "$t/install-kanalg2.sh" --quelle "$t/r1"
+  pruefe B17a ausgabe_hat "ist nicht lesbar"
+  pruefe B17b test ! -e "$KHLI_TEST_AUFRUF"
+  printf '2\n' > /var/lib/khli-php56/freigaben-generation
   mkdir -p /tmp/khli-test-nobody
   cp -r "$t/r1" /tmp/khli-test-nobody/r1
   chmod -R a+rX /tmp/khli-test-nobody

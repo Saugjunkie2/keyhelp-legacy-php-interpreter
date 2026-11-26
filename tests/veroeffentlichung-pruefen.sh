@@ -1,5 +1,8 @@
 #!/bin/bash
-# veroeffentlichung-pruefen.sh - Version 1.0.0
+# veroeffentlichung-pruefen.sh - Version 1.1.0
+# 1.1.0: vergleicht auch den Schlüssel auf dem zweiten Kanal mit dem des Repositorys und prüft die
+#        Signatur der Freigabeliste selbst; eine nicht ladbare Liste und, ab install.sh 1.1.0, eine Liste
+#        ohne Ablaufdatum sind Abweichungen (unabhängige Gegenprüfung vom 26.11.2026, D-04, T-08)
 # Prüft das veröffentlichte Release auf GitHub so, wie es ein vorsichtiger Nutzer vor dem Start tun kann
 # (Drittprüfung vom 26.11.2026, F-001, F-020): lädt SHA256SUMS, SHA256SUMS.sig und install.sh des
 # Releases, prüft die Signatur mit schluessel/release-ed25519.pub aus diesem Repository (nicht mit dem
@@ -40,7 +43,7 @@ pruefe() {
 }
 laden() { curl -fsSL --proto '=https' --proto-redir '=https' --max-time 120 -o "$t/$1" "$basis/$1"; }
 
-printf 'veroeffentlichung-pruefen 1.0.0, Quelle %s, Schlüssel des Repositorys SHA256:%s\n' "$basis" "$fp"
+printf 'veroeffentlichung-pruefen 1.1.0, Quelle %s, Schlüssel des Repositorys SHA256:%s\n' "$basis" "$fp"
 for f in SHA256SUMS SHA256SUMS.sig install.sh RELEASE; do laden "$f" || fehler "Download gescheitert: $basis/$f" 1; done
 pruefe "Signatur von SHA256SUMS mit dem Schlüssel des Repositorys" \
   openssl pkeyutl -verify -pubin -inkey "$pub" -rawin -in "$t/SHA256SUMS" -sigfile "$t/SHA256SUMS.sig"
@@ -62,16 +65,30 @@ sed 's/^/     | /' "$t/lauf.txt"
 pruefe "install.sh --nur-pruefen endet mit 0" test "$rc" = 0
 pruefe "Signatur gültig" grep -q 'Signatur gültig' "$t/lauf.txt"
 pruefe "zweiter Kanal: als gültig geführt" grep -q 'als gültig geführt' "$t/lauf.txt"
-# Laufzeit der Freigabeliste: Erinnerung, wenn sie in weniger als 30 Tagen abläuft
-if curl -fsSL --proto '=https' --max-time 60 -o "$t/freigaben.txt" "$KANAL/freigaben.txt"; then
+# zweiter Kanal selbst (1.1.0): derselbe Schlüssel wie im Repository, Liste mit ihm gültig signiert
+kanal_laden() { curl -fsSL --proto '=https' --proto-redir '=https' --max-time 60 -o "$t/$1" "$KANAL/$1"; }
+if kanal_laden release-ed25519.pub; then
+  pruefe "Schlüssel auf dem zweiten Kanal ist der des Repositorys" test "$(schluessel_fingerabdruck "$t/release-ed25519.pub" || true)" = "$fp"
+else
+  printf 'FEHL Schlüssel auf dem zweiten Kanal nicht ladbar: %s/release-ed25519.pub\n' "$KANAL"; fehl=$((fehl + 1))
+fi
+if kanal_laden freigaben.txt && kanal_laden freigaben.txt.sig; then
+  pruefe "Signatur der Freigabeliste mit dem Schlüssel des Repositorys" \
+    openssl pkeyutl -verify -pubin -inkey "$pub" -rawin -in "$t/freigaben.txt" -sigfile "$t/freigaben.txt.sig"
+  # Laufzeit: Erinnerung, wenn die Liste in weniger als 30 Tagen abläuft
   bis=$(awk '/^# gueltig-bis [0-9-]+$/ {print $3; exit}' "$t/freigaben.txt")
+  inst_v=$(sed -n 's/^INSTALL_SH_VERSION=//p' "$t/install.sh")
   if [ -n "$bis" ]; then
     grenze=$(date -u -d '+30 days' +%Y-%m-%d)
-    printf 'Freigabeliste gültig bis %s\n' "$bis"
+    printf 'Freigabeliste gültig bis %s, Generation %s\n' "$bis" "$(awk '/^# generation [0-9]+$/ {print $3; exit}' "$t/freigaben.txt")"
     pruefe "Freigabeliste gilt noch mindestens 30 Tage" test ! "$grenze" \> "$bis"
+  elif [ "$(printf '%s\n%s\n' "$inst_v" 1.1.0 | sort -V | head -n 1)" = 1.1.0 ]; then
+    printf 'FEHL Freigabeliste ohne Ablaufdatum; install.sh %s lehnt sie ab\n' "$inst_v"; fehl=$((fehl + 1))
   else
-    printf 'Freigabeliste ohne Ablaufdatum (Format vor install.sh 1.1.0)\n'
+    printf 'Freigabeliste ohne Ablaufdatum (Format vor install.sh 1.1.0; das veröffentlichte install.sh %s liest sie noch)\n' "$inst_v"
   fi
+else
+  printf 'FEHL Freigabeliste nicht ladbar: %s/freigaben.txt\n' "$KANAL"; fehl=$((fehl + 1))
 fi
 printf 'Ergebnis: %s\n' "$([ "$fehl" -eq 0 ] && echo 'in Ordnung' || echo "$fehl Abweichungen")"
 [ "$fehl" -eq 0 ]

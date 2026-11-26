@@ -1,12 +1,13 @@
 #!/bin/bash
-# install.sh - Version 1.1.0
+# install.sh - Version 1.1.1
 # keyhelp-legacy-php-interpreter: PHP 5.6 für KeyHelp unter Debian 13 (amd64)
 # https://github.com/Saugjunkie2/keyhelp-legacy-php-interpreter
 # Copyright 2026 Retrowork. Lizenz: Apache License 2.0, siehe LICENSE und NOTICE.
 #
 # Installiert oder aktualisiert PHP 5.6 auf einem KeyHelp-Server mit Debian 13, als root:
 #   curl -fsSL https://github.com/Saugjunkie2/keyhelp-legacy-php-interpreter/releases/latest/download/install.sh | bash
-# Wer dieses Skript selbst prüfen will, bevor es als root läuft: docs/signatur.md, „Vor dem Start prüfen".
+# Wer dieses Skript selbst prüfen will, bevor es als root läuft: docs/signatur.md, Abschnitt „Die Grenze:
+# das erste Skript", oder die Seite des zweiten Kanals https://lizenz.retrowork.de/keyhelp-legacy-php-interpreter/
 # Hilfe: bash install.sh --hilfe
 #
 # Ablauf: lädt die signierte Liste SHA256SUMS des Releases und prüft ihre Ed25519-Signatur mit dem
@@ -20,6 +21,11 @@
 # schluessel/release-ed25519.pub ein. Im Repository steht hier ein leerer Platzhalter; installiert
 # wird nur mit dem install.sh aus einem Release.
 #
+# 1.1.1: Befunde der unabhängigen Gegenprüfung vom 26.11.2026: ein unlesbarer festgehaltener Schlüssel
+#        endet mit Meldung und Exit 3 statt still (mit --neuer-schluessel ersetzt), eine unlesbare
+#        Generation mit Exit 5; Schlüssel und Generation werden über eine temporäre Datei geschrieben und
+#        gegengelesen (G-04); Hilfe und Meldung von --nur-laden nennen, was ein Server ohne Internet
+#        zusätzlich braucht (G-05)
 # 1.1.0: Befunde der Drittprüfung vom 26.11.2026: der zweite Kanal sperrt im Zweifel (nicht erreichbar,
 #        falsch signiert, abgelaufen, ältere Generation, Release nicht gelistet: kein Start ohne
 #        --ohne-zweiten-kanal; F-002); der Server hält den Schlüssel der ersten Installation fest und
@@ -32,7 +38,7 @@ umask 077
 export LC_ALL=C.UTF-8
 PATH=$PATH:/usr/local/sbin:/usr/sbin:/sbin
 
-INSTALL_SH_VERSION=1.1.0
+INSTALL_SH_VERSION=1.1.1
 PRODUKT=keyhelp-legacy-php-interpreter
 SYSTEM=debian13-amd64
 RELEASES=https://github.com/Saugjunkie2/keyhelp-legacy-php-interpreter/releases
@@ -60,11 +66,12 @@ install.sh: PHP 5.6 für KeyHelp unter Debian 13 installieren oder aktualisieren
 
 Aufruf als root:  bash install.sh [Optionen] [-- Optionen für den Installer]
 
-  --version <v>          ein bestimmtes Release statt des neuesten, etwa 0.4.16
+  --version <v>          ein bestimmtes Release statt des neuesten, etwa 0.4.17
   --quelle <ort>         Release aus einem Ordner oder von einer https-Adresse statt von GitHub
   --nur-pruefen          nur laden und prüfen, nichts installieren (auch ohne root)
   --nur-laden <ordner>   laden, prüfen und in einen neuen Ordner legen, etwa für einen Server
-                         ohne Internet (dort: bash <ordner>/install.sh --quelle <ordner>)
+                         ohne Internet; dort: bash <ordner>/install.sh --quelle <ordner>
+                         --ohne-zweiten-kanal -- --original <keyhelps-paket> (docs/betrieb.md)
   --ohne-zweiten-kanal   die Freigabeliste nicht abfragen; Widerrufe bleiben dann ungeprüft
   --aelter-erlauben      ein älteres Release über ein neueres installieren
   --neuer-schluessel     einen anderen Release-Schlüssel annehmen als bei der ersten Installation
@@ -242,8 +249,12 @@ zweiter_kanal() {
   if [[ "$heute" > "$bis" ]]; then
     fehler "die Freigabeliste ist seit $bis abgelaufen; nichts geändert. Retrowork erneuert sie; bis dahin nur mit --ohne-zweiten-kanal" 5
   fi
-  alt=$(cat "$ZUSTAND_ORDNER/freigaben-generation" 2> /dev/null || echo 0)
-  [[ "$alt" =~ ^[0-9]+$ ]] || alt=0
+  # ab 1.1.1 gilt eine vorhandene, aber unlesbare Generation nicht still als 0 (G-04)
+  alt=0
+  if [ -e "$ZUSTAND_ORDNER/freigaben-generation" ]; then
+    alt=$(cat "$ZUSTAND_ORDNER/freigaben-generation" 2> /dev/null || true)
+    [[ "$alt" =~ ^[0-9]+$ ]] || fehler "die gespeicherte Generation in $ZUSTAND_ORDNER/freigaben-generation ist nicht lesbar; nichts geändert. Datei prüfen; ohne sie gilt jede gültige Liste wieder als neu" 5
+  fi
   [ "$FREIGABE_GENERATION" -ge "$alt" ] || fehler "die Freigabeliste hat die Generation $FREIGABE_GENERATION, dieser Server kannte schon die Generation $alt; eine ältere Liste wird nicht angenommen" 5
   zeile=$(awk -v s="$SUMMEN_SHA" '$0 !~ /^#/ && $2 == s {print; exit}' "$d/freigaben.txt")
   [ -n "$zeile" ] || fehler "Release $R_VERSION steht nicht in der Freigabeliste des zweiten Kanals (Generation $FREIGABE_GENERATION); nichts geändert" 5
@@ -263,24 +274,42 @@ schluessel_abgleichen() {
   # hilft das nicht, gegen eine Verwechslung schon, und die geplanten automatischen Updates prüfen dagegen
   local pin=$ZUSTAND_ORDNER/release-ed25519.pub pin_fp
   [ -f "$pin" ] || return 0
-  pin_fp=$(fingerabdruck_von "$pin")
+  # ab 1.1.1 mit eigener Meldung, wenn die Datei leer oder beschädigt ist (vorher stiller Abbruch, G-04)
+  if ! pin_fp=$(fingerabdruck_von "$pin") || [[ ! "$pin_fp" =~ ^[0-9a-f]{64}$ ]]; then
+    [ "$NEUER_SCHLUESSEL" = 1 ] || fehler "der festgehaltene Schlüssel $pin ist nicht lesbar; nichts geändert. Mit --neuer-schluessel ersetzt ihn der Schlüssel dieses install.sh (SHA256:$FINGERABDRUCK)" 3
+    warnung "der festgehaltene Schlüssel $pin ist nicht lesbar; nach der Installation gilt SHA256:$FINGERABDRUCK (--neuer-schluessel)"
+    return 0
+  fi
   [ "$pin_fp" != "$FINGERABDRUCK" ] || return 0
   [ "$NEUER_SCHLUESSEL" = 1 ] || fehler "dieser Server vertraut dem Release-Schlüssel SHA256:$pin_fp, dieses install.sh dem Schlüssel SHA256:$FINGERABDRUCK; nichts geändert. Nur nach einem angekündigten Schlüsselwechsel (docs/signatur.md): --neuer-schluessel" 3
   warnung "der Schlüssel SHA256:$FINGERABDRUCK ersetzt nach der Installation SHA256:$pin_fp (--neuer-schluessel)"
 }
 
 festhalten() {
-  # nach einem erfolgreichen Lauf: Schlüssel und Generation der Freigabeliste im Zustand des Installers
+  # nach einem erfolgreichen Lauf: Schlüssel und Generation der Freigabeliste im Zustand des Installers;
+  # ab 1.1.1 über eine temporäre Datei, gegengelesen und dann umbenannt, damit kein voller Datenträger eine
+  # leere oder halbe Datei hinterlässt (G-04)
   [ -d "$ZUSTAND_ORDNER" ] || return 0
-  if [ ! -f "$ZUSTAND_ORDNER/release-ed25519.pub" ] || [ "$NEUER_SCHLUESSEL" = 1 ]; then
-    cp -- "$tmp/schluessel.pem" "$ZUSTAND_ORDNER/release-ed25519.pub" 2> /dev/null || warnung "Schlüssel nicht festgehalten"
+  local d=$ZUSTAND_ORDNER/release-ed25519.pub g=$ZUSTAND_ORDNER/freigaben-generation
+  if [ ! -f "$d" ] || [ "$NEUER_SCHLUESSEL" = 1 ] || ! fingerabdruck_von "$d" > /dev/null 2>&1; then
+    if cp -- "$tmp/schluessel.pem" "$d.neu" 2> /dev/null && [ "$(fingerabdruck_von "$d.neu" 2> /dev/null || true)" = "$FINGERABDRUCK" ] && mv -f -- "$d.neu" "$d" 2> /dev/null; then
+      :
+    else
+      rm -f -- "$d.neu" 2> /dev/null || true
+      warnung "Schlüssel nicht festgehalten"
+    fi
   fi
   if [ -n "${FREIGABE_GENERATION:-}" ]; then
     local alt
-    alt=$(cat "$ZUSTAND_ORDNER/freigaben-generation" 2> /dev/null || echo 0)
+    alt=$(cat "$g" 2> /dev/null || echo 0)
     [[ "$alt" =~ ^[0-9]+$ ]] || alt=0
     if [ "$FREIGABE_GENERATION" -gt "$alt" ]; then
-      printf '%s\n' "$FREIGABE_GENERATION" > "$ZUSTAND_ORDNER/freigaben-generation" 2> /dev/null || warnung "Generation der Freigabeliste nicht festgehalten"
+      if printf '%s\n' "$FREIGABE_GENERATION" > "$g.neu" 2> /dev/null && [ "$(cat "$g.neu" 2> /dev/null)" = "$FREIGABE_GENERATION" ] && mv -f -- "$g.neu" "$g" 2> /dev/null; then
+        :
+      else
+        rm -f -- "$g.neu" 2> /dev/null || true
+        warnung "Generation der Freigabeliste nicht festgehalten"
+      fi
     fi
   fi
 }
@@ -336,7 +365,7 @@ main() {
     esac
   done
   if [ -n "$VERSION_WUNSCH" ] && [[ ! "$VERSION_WUNSCH" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    fehler "--version erwartet eine Versionsnummer wie 0.4.16" 2
+    fehler "--version erwartet eine Versionsnummer wie 0.4.17" 2
   fi
   durchreichen_pruefen
   if [ -n "$QUELLE" ]; then
@@ -399,6 +428,7 @@ main() {
     cp -- "$tmp/SHA256SUMS" "$tmp/SHA256SUMS.sig" "$NUR_LADEN/"
     while IFS= read -r name <&3; do cp -- "$tmp/dateien/$name" "$NUR_LADEN/"; done 3< "$tmp/namen"
     meldung "geprüftes Release $R_VERSION liegt in $NUR_LADEN; installieren dort mit: bash $NUR_LADEN/install.sh --quelle $NUR_LADEN"
+    meldung "ein Server ohne Internet braucht dazu --ohne-zweiten-kanal (Freigabe und Widerruf bleiben dann ungeprüft), KeyHelps Paket mit -- --original <datei> und die Laufzeitpakete aus Debian 13 (docs/betrieb.md, Ohne Internet)"
     return 0
   fi
 
@@ -412,7 +442,7 @@ main() {
       [ "$AELTER" = 1 ] || fehler "installiert ist $installiert, das Release $R_VERSION ist älter; mit --aelter-erlauben trotzdem" 5
       warnung "installiert ist $installiert, eingespielt wird das ältere Release $R_VERSION (--aelter-erlauben)"
     fi
-    # der Installer prüft das ab 0.4.16 selbst noch einmal unter seiner Sperre (F-004)
+    # der Installer prüft das ab 0.4.17 selbst noch einmal unter seiner Sperre (F-004)
     if [ "$AELTER" = 1 ] && grep -q -- '--aelter-erlauben)' "$tmp/dateien/$R_INSTALLER"; then extra=(--aelter-erlauben); fi
     platz_pruefen /opt/keyhelp/php 700
   else

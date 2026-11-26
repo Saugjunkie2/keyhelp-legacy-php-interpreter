@@ -6,7 +6,7 @@ PHP 5.6 for KeyHelp on Debian 13 (amd64). A Retrowork project.
 
 KeyHelp offers PHP 5.6 only up to Debian 12. This project sets up KeyHelp's own PHP 5.6 interpreter for Debian 12 on a KeyHelp server running Debian 13. It then shows up in the panel like the official interpreters, can be selected per domain and keeps the features it has on Debian 12.
 
-> **Status:** release [0.4.15](https://github.com/Saugjunkie2/keyhelp-legacy-php-interpreter/releases/tag/v0.4.15) of 26 November 2026 is the first public release. Version 0.4.16 with the fixes from a third-party review is being prepared; this repository already shows its state ([CHANGELOG.md](CHANGELOG.md)). Install with the `install.sh` from a release (command below); the `install.sh` in this repository deliberately contains no key.
+> **Status:** release [0.4.15](https://github.com/Saugjunkie2/keyhelp-legacy-php-interpreter/releases/tag/v0.4.15) of 26 November 2026 is the first public release. Version 0.4.17 with the fixes from a third-party review and a second, independent counter-review is being prepared; this repository already shows its state ([CHANGELOG.md](CHANGELOG.md)). Install with the `install.sh` from a release (command below); the `install.sh` in this repository deliberately contains no key.
 
 ## Read this first
 
@@ -38,9 +38,9 @@ As root on the server:
 curl -fsSL https://github.com/Saugjunkie2/keyhelp-legacy-php-interpreter/releases/latest/download/install.sh | bash
 ```
 
-`install.sh` verifies the release signature and every file, asks the second channel for the approval and only then starts the installer. Without a valid signature or approval it changes nothing. Afterwards select PHP version 5.6 for the domain in the panel.
+`install.sh` verifies the release signature and every file, asks the second channel for the approval and only then starts the installer. Without a valid signature or approval it changes nothing; only `--ohne-zweiten-kanal` leaves the approval, and with it a revocation, unchecked. Afterwards select PHP version 5.6 for the domain in the panel.
 
-This command trusts GitHub and the encrypted connection to it: a manipulated `install.sh` could skip every check. If you do not want that, verify `install.sh` before starting it, with the key from the second channel, independent of GitHub:
+This command trusts GitHub and the encrypted connection to it: a manipulated `install.sh` could skip every check. If you do not want that, verify `install.sh` before starting it, with the key from the second channel. This is independent of GitHub only if you take the following block from the second channel's page (https://lizenz.retrowork.de/keyhelp-legacy-php-interpreter/), because this README itself is on GitHub; the same block is shown there:
 
 ```bash
 cd "$(mktemp -d)"
@@ -68,7 +68,7 @@ Running the installation command again installs the newest release (`update`). `
 ```bash
 khli-php56 check      # files, libraries, modules, FPM configuration and service
 khli-php56 status     # version, state and service
-khli-php56 uninstall  # full removal; refuses as long as KeyHelp, crontabs or systemd units use 5.6
+khli-php56 uninstall  # full removal; refuses as long as one of the checked places uses 5.6
 ```
 
 `uninstall` detects use by KeyHelp (domains, scheduled tasks, default interpreter, pools), by crontabs and by systemd units, but not calls from your own scripts. Details, exit codes and troubleshooting: [docs/en/operation.md](docs/en/operation.md).

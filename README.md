@@ -6,7 +6,7 @@ PHP 5.6 für KeyHelp unter Debian 13 (amd64). Ein Projekt von Retrowork.
 
 KeyHelp bietet PHP 5.6 nur bis Debian 12 an. Dieses Projekt richtet KeyHelps eigenen PHP-5.6-Interpreter für Debian 12 auf einem KeyHelp-Server mit Debian 13 ein. Er erscheint danach im Panel wie die offiziellen Interpreter, lässt sich je Domain wählen und behält die Funktionen, die er unter Debian 12 hat.
 
-> **Stand:** Release [0.4.15](https://github.com/Saugjunkie2/keyhelp-legacy-php-interpreter/releases/tag/v0.4.15) vom 26.11.2026 ist das erste öffentliche Release. Die Fassung 0.4.16 mit den Korrekturen aus einer Drittprüfung ist in Vorbereitung; dieses Repository zeigt schon ihren Stand ([CHANGELOG.md](CHANGELOG.md)). Installiert wird mit dem `install.sh` aus einem Release (Befehl unten); das `install.sh` in diesem Repository enthält absichtlich keinen Schlüssel.
+> **Stand:** Release [0.4.15](https://github.com/Saugjunkie2/keyhelp-legacy-php-interpreter/releases/tag/v0.4.15) vom 26.11.2026 ist das erste öffentliche Release. Die Fassung 0.4.17 mit den Korrekturen aus einer Drittprüfung und einer zweiten, unabhängigen Gegenprüfung ist in Vorbereitung; dieses Repository zeigt schon ihren Stand ([CHANGELOG.md](CHANGELOG.md)). Installiert wird mit dem `install.sh` aus einem Release (Befehl unten); das `install.sh` in diesem Repository enthält absichtlich keinen Schlüssel.
 
 ## Wichtig vorab
 
@@ -38,9 +38,9 @@ Als root auf dem Server:
 curl -fsSL https://github.com/Saugjunkie2/keyhelp-legacy-php-interpreter/releases/latest/download/install.sh | bash
 ```
 
-`install.sh` prüft die Signatur des Releases und jede Datei, fragt den zweiten Kanal nach der Freigabe und startet erst dann den Installer. Ohne gültige Signatur oder Freigabe ändert es nichts. Danach im Panel bei der Domain die PHP-Version 5.6 wählen.
+`install.sh` prüft die Signatur des Releases und jede Datei, fragt den zweiten Kanal nach der Freigabe und startet erst dann den Installer. Ohne gültige Signatur oder Freigabe ändert es nichts; nur `--ohne-zweiten-kanal` lässt die Freigabe und damit auch einen Widerruf ungeprüft. Danach im Panel bei der Domain die PHP-Version 5.6 wählen.
 
-Dieser Befehl vertraut GitHub und der verschlüsselten Verbindung dorthin: Ein manipuliertes `install.sh` könnte jede Prüfung weglassen. Wer das nicht will, prüft `install.sh` vor dem Start mit dem Schlüssel vom zweiten Kanal, unabhängig von GitHub:
+Dieser Befehl vertraut GitHub und der verschlüsselten Verbindung dorthin: Ein manipuliertes `install.sh` könnte jede Prüfung weglassen. Wer das nicht will, prüft `install.sh` vor dem Start mit dem Schlüssel vom zweiten Kanal. Unabhängig von GitHub ist das nur, wenn der folgende Block von der Seite des zweiten Kanals stammt (https://lizenz.retrowork.de/keyhelp-legacy-php-interpreter/), denn dieses README liegt selbst auf GitHub; dort steht derselbe Block:
 
 ```bash
 cd "$(mktemp -d)"
@@ -68,7 +68,7 @@ Derselbe Befehl wie bei der Installation spielt das neueste Release ein (`update
 ```bash
 khli-php56 check      # Dateien, Bibliotheken, Module, FPM-Konfiguration und Dienst
 khli-php56 status     # Version, Zustand und Dienst
-khli-php56 uninstall  # vollständiger Rückbau; verweigert, solange KeyHelp, Crontabs oder systemd-Units 5.6 nutzen
+khli-php56 uninstall  # vollständiger Rückbau; verweigert, solange eine der geprüften Stellen 5.6 nutzt
 ```
 
 `uninstall` erkennt die Nutzung durch KeyHelp (Domains, geplante Aufgaben, Standard-Interpreter, Pools), durch Crontabs und durch systemd-Units, nicht aber Aufrufe aus eigenen Skripten. Einzelheiten, Exit-Codes und Fehlersuche: [docs/betrieb.md](docs/betrieb.md).

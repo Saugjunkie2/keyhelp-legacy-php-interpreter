@@ -1,5 +1,5 @@
 #!/bin/bash
-# freigabe-eintragen.sh - Version 1.1.0
+# freigabe-eintragen.sh - Version 1.2.0
 # Führt die Freigabeliste für den zweiten Kanal: trägt ein signiertes Release als gültig ein, widerruft
 # es oder erneuert nur das Ablaufdatum, und signiert die Liste neu. install.sh startet ab 1.1.0 nur mit
 # einer gültigen, nicht abgelaufenen Liste, in der das Release als gueltig steht (docs/signatur.md).
@@ -14,10 +14,15 @@
 #   bash werkzeuge/freigabe-eintragen.sh [--gueltig-tage <n>] <freigaben.txt> <release-ordner> <privater-schluessel> [widerrufen <grund>]
 #   bash werkzeuge/freigabe-eintragen.sh [--gueltig-tage <n>] --erneuern <freigaben.txt> <privater-schluessel>
 #   --gueltig-tage  Laufzeit der Liste ab heute, Vorgabe 365
+#   --bisheriger-schluessel <pub>  nach einem Schlüsselwechsel: die vorhandene Liste ist noch mit dem
+#                   bisherigen Schlüssel signiert; sie wird mit ihm geprüft und mit ihrer Generation
+#                   fortgeführt, signiert wird die neue Liste mit dem neuen Schlüssel (docs/signatur.md)
 # Ergebnis: freigaben.txt und freigaben.txt.sig im selben Ordner; beide kommen danach zusammen auf den
 # zweiten Kanal (zwischen den beiden Uploads lehnt install.sh die Liste kurz ab).
 # Exit: 0 eingetragen und geprüft, 2 falscher Aufruf, 3 Signatur oder Release falsch, 4 Voraussetzung fehlt
 #
+# 1.2.0: --bisheriger-schluessel für einen Schlüsselwechsel, die Generation läuft weiter (unabhängige
+#        Gegenprüfung vom 26.11.2026, G-03)
 # 1.1.0: Generation und Ablaufdatum in der Liste, Modus --erneuern, Kopf in ASCII, Prüfung gegen
 #        schluessel/release-ed25519.pub, beide Dateien erst geschrieben, wenn alles stimmt (Drittprüfung
 #        vom 26.11.2026, F-002, F-017)
@@ -29,11 +34,12 @@ wurzel=$(cd "$hier/.." && pwd)
 # shellcheck source=werkzeuge/gemeinsam.sh
 . "$hier/gemeinsam.sh"
 
-tage=365 erneuern=0
+tage=365 erneuern=0 bisher=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --gueltig-tage) [ $# -ge 2 ] && [[ "$2" =~ ^[0-9]{1,4}$ ]] && [ "$2" -ge 1 ] || fehler "--gueltig-tage braucht eine Zahl von 1 bis 9999" 2; tage=$2; shift 2 ;;
     --erneuern) erneuern=1; shift ;;
+    --bisheriger-schluessel) [ $# -ge 2 ] || fehler "--bisheriger-schluessel braucht eine Datei" 2; bisher=$2; shift 2 ;;
     -*) fehler "unbekannte Option: $1" 2 ;;
     *) break ;;
   esac
@@ -61,10 +67,18 @@ fi
 command -v openssl > /dev/null || fehler "openssl fehlt" 4
 pub=$wurzel/schluessel/release-ed25519.pub
 fingerabdruck=$(schluessel_fingerabdruck "$pub") || fehler "$pub enthält keinen Ed25519-Schlüssel" 4
+# Schlüssel, mit dem die vorhandene Liste geprüft wird: der bisherige nach einem Wechsel, sonst der jetzige
+pub_liste=$pub
+if [ -n "$bisher" ]; then
+  [ -f "$bisher" ] || fehler "bisheriger Schlüssel nicht gefunden: $bisher" 4
+  fp_bisher=$(schluessel_fingerabdruck "$bisher") || fehler "$bisher enthält keinen Ed25519-Schlüssel" 4
+  [ "$fp_bisher" != "$fingerabdruck" ] || fehler "--bisheriger-schluessel nennt denselben Schlüssel wie schluessel/release-ed25519.pub" 2
+  pub_liste=$bisher
+fi
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/khli-freigabe.XXXXXX")
 trap 'rm -rf -- "$tmp"' EXIT
-pruefen() { openssl pkeyutl -verify -pubin -inkey "$pub" -rawin -in "$1" -sigfile "$2" > /dev/null 2>&1; }
+pruefen() { openssl pkeyutl -verify -pubin -inkey "${3:-$pub}" -rawin -in "$1" -sigfile "$2" > /dev/null 2>&1; }
 
 if [ "$modus" != erneuern ]; then
   schluessel_auslesen "$dir/install.sh" > "$tmp/release.pem"
@@ -82,7 +96,12 @@ generation=0
 if [ -f "$liste" ]; then
   ohne_cr "$liste"
   if [ -f "$liste.sig" ]; then
-    pruefen "$liste" "$liste.sig" || fehler "die vorhandene Liste ist nicht mit dem Schlüssel des Repositorys signiert; bitte prüfen, bevor sie ersetzt wird" 3
+    if [ -n "$bisher" ]; then
+      pruefen "$liste" "$liste.sig" "$pub_liste" || fehler "die vorhandene Liste ist nicht mit dem bisherigen Schlüssel SHA256:$fp_bisher signiert; bitte prüfen, bevor sie ersetzt wird" 3
+      meldung "vorhandene Liste mit dem bisherigen Schlüssel SHA256:$fp_bisher geprüft; die neue trägt den Schlüssel SHA256:$fingerabdruck"
+    else
+      pruefen "$liste" "$liste.sig" || fehler "die vorhandene Liste ist nicht mit dem Schlüssel des Repositorys signiert; nach einem Schlüsselwechsel: --bisheriger-schluessel <alter-öffentlicher-schlüssel>" 3
+    fi
   else
     [ "$modus" = gueltig ] || fehler "zur vorhandenen Liste fehlt $liste.sig" 3
   fi
