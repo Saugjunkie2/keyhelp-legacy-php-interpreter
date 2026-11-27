@@ -2,7 +2,9 @@
 
 Ein Release trägt die Version seines Installers. Neue Einträge oben. / A release carries the version of its installer. Newest entries first.
 
-## 0.4.17 (in Vorbereitung / in preparation)
+## 0.4.17 (2026-11-27)
+
+Veröffentlicht am 27.11.2026, Tag `v0.4.17` auf `c239955`, SHA-256 von `SHA256SUMS` `bd55bab80f8f46ddbe8586a01052b6d2523245c73daf3287dde13b281c1aaa0d`. Die Freigabeliste auf dem zweiten Kanal hat ab jetzt Generation und Ablaufdatum (Generation 1, gültig bis 2027-11-26). / Published on 27 November 2026; the release list on the second channel now carries a generation and an expiry date.
 
 Korrekturen aus einer statischen Drittprüfung vom 26.11.2026 (25 Punkte, Kürzel F-001 bis F-025) und aus einer unabhängigen Gegenprüfung dieser Korrekturen am selben Tag (Kürzel G-01 bis G-08). Die Zwischenfassung 0.4.16 wurde nicht veröffentlicht. / Fixes from a static third-party review of 26 November 2026 and from an independent counter-review of these fixes on the same day; the interim version 0.4.16 was not published.
 

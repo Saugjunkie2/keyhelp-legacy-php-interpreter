@@ -6,7 +6,7 @@ PHP 5.6 for KeyHelp on Debian 13 (amd64). A Retrowork project.
 
 KeyHelp offers PHP 5.6 only up to Debian 12. This project sets up KeyHelp's own PHP 5.6 interpreter for Debian 12 on a KeyHelp server running Debian 13. It then shows up in the panel like the official interpreters, can be selected per domain and keeps the features it has on Debian 12.
 
-> **Status:** release [0.4.15](https://github.com/Saugjunkie2/keyhelp-legacy-php-interpreter/releases/tag/v0.4.15) of 26 November 2026 is the first public release. Version 0.4.17 with the fixes from a third-party review and a second, independent counter-review is being prepared; this repository already shows its state ([CHANGELOG.md](CHANGELOG.md)). Install with the `install.sh` from a release (command below); the `install.sh` in this repository deliberately contains no key.
+> **Status:** release [0.4.17](https://github.com/Saugjunkie2/keyhelp-legacy-php-interpreter/releases/tag/v0.4.17) of 27 November 2026 with the fixes from a third-party review and a second, independent counter-review ([CHANGELOG.md](CHANGELOG.md)); the first public release was 0.4.15 of 26 November 2026. Install with the `install.sh` from a release (command below); the `install.sh` in this repository deliberately contains no key.
 
 ## Read this first
 
